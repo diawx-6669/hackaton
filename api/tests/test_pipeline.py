@@ -109,3 +109,16 @@ def test_health_and_validation():
     with TestClient(app) as client:
         assert client.get("/api/health").json()["status"] == "ok"
         assert client.get("/api/profile").status_code == 422
+
+
+async def test_wikidata_down_is_reported_as_source_failure(api_mock):
+    import httpx as _httpx
+
+    api_mock.get(WIKIDATA_API).mock(side_effect=_httpx.ConnectError("no network"))
+    api_mock.get(WIKIDATA_SPARQL).mock(side_effect=_httpx.ConnectError("no network"))
+    events = await collect_events(q="КБТУ")
+    last = events[-1]
+    assert last.stage is Stage.ERROR
+    # Недоступный источник не должен выглядеть как «такого вуза нет».
+    assert "не найден" not in last.message
+    assert "Wikidata" in last.message

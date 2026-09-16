@@ -38,6 +38,7 @@ def test_resolve_reports_upstream_failure(api_mock):
     api_mock.get(WIKIDATA_SPARQL).mock(side_effect=httpx.ConnectError("no network"))
     with TestClient(app) as client:
         r = client.get("/api/resolve", params={"q": "КБТУ"})
-    # Все языковые запросы упали → честный пустой результат, а не выдуманный вуз.
-    assert r.status_code == 200
-    assert r.json()["candidates"] == []
+    # Все языковые запросы упали → 502 «источник недоступен»,
+    # а НЕ 200 с пустым списком: молчаливое «ничего не найдено» врёт пользователю.
+    assert r.status_code == 502
+    assert "Wikidata" in r.json()["detail"]

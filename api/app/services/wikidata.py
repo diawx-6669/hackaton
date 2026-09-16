@@ -14,6 +14,11 @@ from app.services.textmatch import expand_query, similarity
 
 log = logging.getLogger(__name__)
 
+
+class UpstreamUnavailable(RuntimeError):
+    """Wikidata не ответила ни на один запрос — это не «вуз не найден»."""
+
+
 SEARCH_LANGUAGES = ("ru", "en", "kk")
 
 # Point(76.9455 43.2352) -> (lon, lat)
@@ -57,7 +62,8 @@ def parse_point(value: str | None) -> Optional[Coordinates]:
     return _parse_point(value)
 
 
-async def _search_once(query: str, language: str, limit: int) -> list[dict[str, Any]]:
+async def _search_once(query: str, language: str, limit: int) -> list[dict[str, Any]] | None:
+    """Возвращает список совпадений, либо None если запрос вообще не прошёл."""
     s = get_settings()
     try:
         data = await get_json(
@@ -75,7 +81,7 @@ async def _search_once(query: str, language: str, limit: int) -> list[dict[str, 
         )
     except Exception as exc:  # один упавший язык не должен ронять поиск
         log.warning("wbsearchentities(%s, %s) failed: %s", query, language, exc)
-        return []
+        return None
     return data.get("search", []) or []
 
 
@@ -90,9 +96,11 @@ async def search_entities(query: str, limit: int = 12) -> dict[str, dict[str, An
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     merged: dict[str, dict[str, Any]] = {}
+    ok = 0
     for res in results:
-        if isinstance(res, BaseException):
+        if isinstance(res, BaseException) or res is None:
             continue
+        ok += 1
         for hit in res:
             qid = hit.get("id")
             if not qid:
@@ -111,6 +119,11 @@ async def search_entities(query: str, limit: int = 12) -> dict[str, dict[str, An
                 prev["aliases"].append(matched)
             if not prev.get("description") and hit.get("description"):
                 prev["description"] = hit["description"]
+
+    if ok == 0 and tasks:
+        raise UpstreamUnavailable(
+            "Wikidata не ответила ни на один поисковый запрос — проверьте сеть/прокси"
+        )
     return merged
 
 
