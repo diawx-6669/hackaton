@@ -16,6 +16,7 @@ from app.models import (
     CampusDescription,
     CategoryBucket,
     RejectReason,
+    SiteText,
     Photo,
     PhotoCategory,
     Profile,
@@ -406,9 +407,21 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
     # --- описание кампуса (шаг 6 ТЗ) ---
     description: CampusDescription | None = None
     if verified or needs_review:
+        # Текст с сайта вуза — страницы уже скачаны сборщиком фотографий,
+        # поэтому второй раз в сеть не идём: обход закеширован.
+        site_texts: list[SiteText] = []
+        if uni.website:
+            try:
+                site_texts = await asyncio.wait_for(
+                    officialsite.collect_texts(uni.website),
+                    timeout=max(1.0, min(6.0, clock.remaining(settings.total_timeout))),
+                )
+            except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+                site_texts = []
+
         try:
             result = await asyncio.wait_for(
-                describe.describe(uni, verified or needs_review),
+                describe.describe(uni, verified or needs_review, site_texts),
                 timeout=max(1.0, clock.remaining(settings.total_timeout)),
             )
         except asyncio.TimeoutError:

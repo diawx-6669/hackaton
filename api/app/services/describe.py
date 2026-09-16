@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from app.config import get_settings
-from app.models import Photo, University
+from app.models import Photo, SiteText, University
 from app.services.http import get_client
 
 log = logging.getLogger(__name__)
@@ -100,7 +100,11 @@ class Description:
     model: str = ""
 
 
-def build_facts(uni: University, photos: list[Photo]) -> list[dict[str, str]]:
+def build_facts(
+    uni: University,
+    photos: list[Photo],
+    site_texts: list[SiteText] | None = None,
+) -> list[dict[str, str]]:
     """Пронумерованные факты из нашего конвейера — единственный вход для LLM."""
     facts: list[dict[str, str]] = []
 
@@ -129,6 +133,11 @@ def build_facts(uni: University, photos: list[Photo]) -> list[dict[str, str]]:
             f"Найдено подтверждённых фотографий категории «{category}»: {count}",
             uni.wikidata_url,
         )
+
+    # Текст с официального сайта — самый содержательный источник, поэтому
+    # идёт раньше подписей к фотографиям и не вытесняется ими.
+    for n, site in enumerate(site_texts or [], start=1):
+        add(f"site-{n}", f"Со страницы «{site.title}» сайта вуза: {site.text}", site.url)
 
     for photo in photos[:30]:
         text = photo.description or photo.title
@@ -259,7 +268,11 @@ async def _call_groq(prompt: str, key: str) -> Optional[dict[str, Any]]:
     return json.loads(content) if content else None
 
 
-async def describe(uni: University, photos: list[Photo]) -> Optional[Description]:
+async def describe(
+    uni: University,
+    photos: list[Photo],
+    site_texts: list[SiteText] | None = None,
+) -> Optional[Description]:
     """Возвращает описание или None, если LLM не подключена/не ответила."""
     settings = get_settings()
     active = settings.active_llm
@@ -267,7 +280,7 @@ async def describe(uni: University, photos: list[Photo]) -> Optional[Description
         return None
     provider, key = active
 
-    facts = build_facts(uni, photos)
+    facts = build_facts(uni, photos, site_texts)
     if len(facts) < 3:
         return None
 

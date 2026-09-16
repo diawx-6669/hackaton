@@ -239,6 +239,14 @@ class SubscribeResponse(BaseModel):
     queue_size: int
 
 
+class SiteText(BaseModel):
+    """Фрагмент текста со страницы официального сайта вуза."""
+
+    url: str
+    title: str
+    text: str
+
+
 class UploadRecord(BaseModel):
     """Фотография, загруженная студентом. Не входит в проверенную галерею."""
 

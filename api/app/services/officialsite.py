@@ -19,7 +19,9 @@ from typing import Optional
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
-from app.models import Photo, RejectReason, SourceKind
+from app.config import get_settings
+from app.models import Photo, RejectReason, SiteText, SourceKind
+from app.services.cache import get_cache
 from app.services.http import get_client
 
 log = logging.getLogger(__name__)
@@ -43,6 +45,66 @@ IMAGE_EXT = (".jpg", ".jpeg", ".png", ".webp")
 MAX_PAGES = 5
 MAX_IMAGES = 40
 PAGE_TIMEOUT = 6.0
+
+
+# Блоки, текст которых к описанию кампуса отношения не имеет.
+SKIP_TAGS = {"script", "style", "nav", "footer", "header", "form", "noscript", "svg"}
+TEXT_TAGS = {"p", "h1", "h2", "h3", "li"}
+MIN_LINE = 60       # короче — это пункт меню, а не предложение
+MAX_PAGE_CHARS = 900
+MAX_TOTAL_PAGES = 4
+
+
+class _TextExtractor(HTMLParser):
+    """Собирает осмысленный текст: заголовки и абзацы, без меню и скриптов."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.title = ""
+        self.description = ""
+        self._chunks: list[str] = []
+        self._skip_depth = 0
+        self._capture = 0
+        self._in_title = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in SKIP_TAGS:
+            self._skip_depth += 1
+        elif tag == "title":
+            self._in_title = True
+        elif tag in TEXT_TAGS and not self._skip_depth:
+            self._capture += 1
+        elif tag == "meta":
+            data = {k: (v or "") for k, v in attrs}
+            if data.get("name") == "description" and data.get("content"):
+                self.description = data["content"].strip()
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in SKIP_TAGS and self._skip_depth:
+            self._skip_depth -= 1
+        elif tag == "title":
+            self._in_title = False
+        elif tag in TEXT_TAGS and self._capture:
+            self._capture -= 1
+            self._chunks.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if self._in_title and not self.title:
+            self.title = data.strip()
+        elif self._capture and not self._skip_depth:
+            self._chunks.append(data)
+
+    @property
+    def text(self) -> str:
+        raw = "".join(self._chunks)
+        lines = []
+        seen: set[str] = set()
+        for line in raw.split("\n"):
+            cleaned = re.sub(r"\s+", " ", line).strip()
+            if len(cleaned) >= MIN_LINE and cleaned not in seen:
+                seen.add(cleaned)
+                lines.append(cleaned)
+        return " ".join(lines)[:MAX_PAGE_CHARS]
 
 
 class _Extractor(HTMLParser):
@@ -168,35 +230,76 @@ def _to_photos(html: str, page_url: str, host: str) -> list[Photo]:
     return photos
 
 
-async def collect(website: str, university_name: str = "") -> list[Photo]:
-    """Фотографии со страниц о кампусе на официальном сайте вуза."""
-    if not website:
-        return []
-
+async def _crawl(website: str) -> list[tuple[str, str]]:
+    """Страницы сайта: главная плюс подходящие по смыслу. Результат кешируется,
+    чтобы сбор фотографий и сбор текста не ходили на сайт по второму разу."""
     parsed = urlparse(website if "://" in website else f"https://{website}")
     host = parsed.hostname
     if not host:
         return []
     base = f"{parsed.scheme}://{host}"
 
-    robots = await _robots(base)
-    agent = "CampusLens"
+    settings = get_settings()
+    cache = get_cache()
+    key = cache.key("site", base)
 
-    if not robots.can_fetch(agent, base):
-        log.info("robots.txt запрещает обход %s — сайт вуза пропускаем", host)
+    async def produce() -> list[tuple[str, str]]:
+        robots = await _robots(base)
+        agent = "CampusLens"
+        if not robots.can_fetch(agent, base):
+            log.info("robots.txt запрещает обход %s", host)
+            return []
+
+        home = await _fetch(base)
+        if not home:
+            return []
+
+        pages = [p for p in _pick_pages(home, base, host) if robots.can_fetch(agent, p)]
+        fetched = await asyncio.gather(*(_fetch(p) for p in pages), return_exceptions=True)
+
+        result = [(base, home)]
+        for url, html in zip(pages, fetched):
+            if isinstance(html, str):
+                result.append((url, html))
+        return result
+
+    if not settings.cache_enabled:
+        return await produce()
+    return await cache.get_or_set(key, settings.cache_ttl_photos, produce)
+
+
+async def collect_texts(website: str) -> list[SiteText]:
+    """Текст со страниц о вузе — источник для описания кампуса (шаг 6 ТЗ)."""
+    pages = await _crawl(website)
+    texts: list[SiteText] = []
+
+    for url, html in pages[:MAX_TOTAL_PAGES]:
+        parser = _TextExtractor()
+        try:
+            parser.feed(html)
+        except Exception as exc:  # noqa: BLE001 — кривая разметка не повод падать
+            log.debug("текст со страницы %s не разобран: %s", url, exc)
+            continue
+
+        body = parser.text or parser.description
+        if body and len(body) >= MIN_LINE:
+            texts.append(SiteText(url=url, title=parser.title or url, text=body))
+    return texts
+
+
+async def collect(website: str, university_name: str = "") -> list[Photo]:
+    """Фотографии со страниц о кампусе на официальном сайте вуза."""
+    if not website:
         return []
 
-    home = await _fetch(base)
-    if not home:
+    pages = await _crawl(website)
+    if not pages:
         return []
+    host = urlparse(pages[0][0]).hostname or ""
 
-    pages = [p for p in _pick_pages(home, base, host) if robots.can_fetch(agent, p)]
-    fetched = await asyncio.gather(*(_fetch(p) for p in pages), return_exceptions=True)
-
-    photos = _to_photos(home, base, host)
-    for page_url, html in zip(pages, fetched):
-        if isinstance(html, str):
-            photos.extend(_to_photos(html, page_url, host))
+    photos: list[Photo] = []
+    for page_url, html in pages:
+        photos.extend(_to_photos(html, page_url, host))
 
     # Один и тот же файл на нескольких страницах — не повод его дублировать.
     unique: dict[str, Photo] = {}

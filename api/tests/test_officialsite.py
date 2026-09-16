@@ -99,3 +99,78 @@ async def test_unreachable_site_returns_nothing(api_mock):
 
 async def test_empty_website_is_noop():
     assert await officialsite.collect("", "KBTU") == []
+
+
+# --- текст со страниц сайта (источник для описания кампуса) ---
+
+RICH_PAGE = """
+<html>
+<head>
+  <title>О кампусе — КБТУ</title>
+  <meta name="description" content="Кампус университета в центре Алматы">
+</head>
+<body>
+  <nav><a href="/">Главная</a><a href="/news">Новости</a></nav>
+  <script>var analytics = "это не должно попасть в текст";</script>
+  <h1>Кампус университета</h1>
+  <p>Главный корпус расположен в центре Алматы и занимает историческое здание,
+     построенное в середине прошлого века и отреставрированное в 2011 году.</p>
+  <ul><li>Меню</li><li>Ещё</li></ul>
+  <p>На территории работают библиотека с читальным залом на двести мест,
+     лаборатории и спортивный комплекс с бассейном.</p>
+  <footer>Все права защищены. Контакты и телефоны приёмной комиссии</footer>
+</body></html>
+"""
+
+
+@pytest.fixture
+def rich_site(api_mock):
+    api_mock.get(f"{SITE}/robots.txt").mock(
+        return_value=httpx.Response(200, text="User-agent: *\nDisallow: /admin/\n")
+    )
+    api_mock.get(f"{SITE}/about/campus").mock(
+        return_value=httpx.Response(200, text=RICH_PAGE, headers={"content-type": "text/html"})
+    )
+    api_mock.get(f"{SITE}/students/dormitory").mock(
+        return_value=httpx.Response(200, text=DORM, headers={"content-type": "text/html"})
+    )
+    api_mock.get(f"{SITE}/").mock(
+        return_value=httpx.Response(200, text=HOME, headers={"content-type": "text/html"})
+    )
+    return api_mock
+
+
+async def test_collects_meaningful_text(rich_site):
+    texts = await officialsite.collect_texts(SITE)
+    campus = next(t for t in texts if "campus" in t.url)
+
+    assert campus.title == "О кампусе — КБТУ"
+    assert "Главный корпус расположен в центре Алматы" in campus.text
+    assert "библиотека с читальным залом" in campus.text
+    assert campus.url == f"{SITE}/about/campus"
+
+
+async def test_scripts_menus_and_footers_are_not_text(rich_site):
+    campus = next(t for t in await officialsite.collect_texts(SITE) if "campus" in t.url)
+
+    assert "analytics" not in campus.text, "содержимое script — не текст страницы"
+    assert "Новости" not in campus.text, "пункты меню не нужны"
+    assert "Меню" not in campus.text
+    assert "приёмной комиссии" not in campus.text, "подвал не описывает кампус"
+
+
+async def test_short_pages_are_skipped(rich_site):
+    texts = await officialsite.collect_texts(SITE)
+    # У страницы общежитий только картинка и никакого текста.
+    assert not any("dormitory" in t.url for t in texts)
+
+
+async def test_text_is_capped_per_page(rich_site):
+    for t in await officialsite.collect_texts(SITE):
+        assert len(t.text) <= 900, "в модель не должна уезжать вся страница целиком"
+
+
+async def test_unreachable_site_yields_no_text(api_mock):
+    api_mock.get(f"{SITE}/robots.txt").mock(side_effect=httpx.ConnectError("down"))
+    api_mock.get(f"{SITE}/").mock(side_effect=httpx.ConnectError("down"))
+    assert await officialsite.collect_texts(SITE) == []

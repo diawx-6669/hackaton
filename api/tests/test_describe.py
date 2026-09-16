@@ -390,3 +390,27 @@ async def test_gemini_wins_over_groq_in_auto_mode(monkeypatch):
     get_settings.cache_clear()
     assert get_settings().active_llm[0] == "gemini"
     get_settings.cache_clear()
+
+
+async def test_site_text_becomes_a_citable_source():
+    """Текст с сайта вуза — источник, на который LLM может сослаться."""
+    from app.models import SiteText
+
+    facts = describe.build_facts(
+        uni(),
+        [photo("a.jpg", "Корпус")],
+        [SiteText(url="https://kbtu.edu.kz/about/campus", title="О кампусе",
+                  text="Главный корпус расположен в центре Алматы.")],
+    )
+    site_fact = next(f for f in facts if f["id"] == "site-1")
+    assert "Главный корпус расположен в центре Алматы" in site_fact["text"]
+    assert site_fact["url"] == "https://kbtu.edu.kz/about/campus"
+
+    # И на него можно корректно сослаться — ссылка ведёт на страницу вуза.
+    raw = {
+        "summary": "Главный корпус в центре Алматы.",
+        "claims": [{"claim": "Главный корпус в центре Алматы", "source_id": "site-1"}],
+        "insufficient_data": False,
+    }
+    result = describe._validate(raw, facts)
+    assert result.claims[0]["url"] == "https://kbtu.edu.kz/about/campus"
