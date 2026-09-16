@@ -29,6 +29,12 @@ export function SiteHeader() {
             <span className="hidden sm:inline">Сравнить вузы</span>
           </Link>
           {/* На 375px ссылка распирала шапку, поэтому ниже 400px прячем: она есть в подвале */}
+          <Link
+            href="/my"
+            className="whitespace-nowrap rounded-lg px-1.5 py-1.5 text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--foreground)] sm:px-3"
+          >
+            Мои фото
+          </Link>
           <a
             href="https://github.com/diawx-6669/hackaton"
             target="_blank"

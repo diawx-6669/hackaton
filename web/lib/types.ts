@@ -188,3 +188,21 @@ export type Comparison = {
   rows: ComparisonRow[];
   took_ms: number;
 };
+
+export type UploadRecord = {
+  id: string;
+  url: string;
+  width: number;
+  height: number;
+  caption?: string | null;
+  university_name?: string | null;
+  has_geotag: boolean;
+  coins: number;
+  created_at: string;
+};
+
+export type Wallet = {
+  photos: number;
+  coins: number;
+  per_photo: number;
+};

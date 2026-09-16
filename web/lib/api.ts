@@ -1,4 +1,5 @@
-import type { Comparison, ResolveResponse, StageEvent } from "./types";
+import { getDeviceId } from "./device";
+import type { Comparison, ResolveResponse, StageEvent, UploadRecord, Wallet } from "./types";
 
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:8000";
@@ -79,4 +80,47 @@ export async function compareUniversities(
     throw new Error(detail?.detail ?? `Сравнение не удалось (${res.status})`);
   }
   return res.json();
+}
+
+/** Загрузки и кошелёк опознают пользователя по идентификатору устройства. */
+function deviceHeaders(): HeadersInit {
+  return { "X-Device-Id": getDeviceId() };
+}
+
+export async function uploadPhoto(
+  file: File,
+  extra: { universityName?: string; caption?: string } = {},
+): Promise<UploadRecord> {
+  const form = new FormData();
+  form.append("file", file);
+  if (extra.universityName) form.append("university_name", extra.universityName);
+  if (extra.caption) form.append("caption", extra.caption);
+
+  const res = await fetch(`${API_BASE}/api/uploads`, {
+    method: "POST",
+    headers: deviceHeaders(),
+    body: form,
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(typeof body?.detail === "string" ? body.detail : "Не удалось загрузить фото");
+  }
+  return body as UploadRecord;
+}
+
+export async function myUploads(): Promise<UploadRecord[]> {
+  const res = await fetch(`${API_BASE}/api/uploads`, { headers: deviceHeaders() });
+  if (!res.ok) throw new Error("Не удалось получить список фото");
+  return (await res.json()).items as UploadRecord[];
+}
+
+export async function myWallet(): Promise<Wallet> {
+  const res = await fetch(`${API_BASE}/api/wallet`, { headers: deviceHeaders() });
+  if (!res.ok) throw new Error("Не удалось получить баланс");
+  return res.json();
+}
+
+/** Файлы отдаёт бэкенд, поэтому относительный путь надо дополнить его адресом. */
+export function uploadUrl(path: string): string {
+  return path.startsWith("http") ? path : `${API_BASE}${path}`;
 }

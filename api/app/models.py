@@ -239,6 +239,30 @@ class SubscribeResponse(BaseModel):
     queue_size: int
 
 
+class UploadRecord(BaseModel):
+    """Фотография, загруженная студентом. Не входит в проверенную галерею."""
+
+    id: str
+    url: str
+    width: int
+    height: int
+    caption: Optional[str] = None
+    university_name: Optional[str] = None
+    has_geotag: bool = False
+    coins: int = 0
+    created_at: str
+
+
+class UploadListResponse(BaseModel):
+    items: list[UploadRecord] = Field(default_factory=list)
+
+
+class WalletResponse(BaseModel):
+    photos: int
+    coins: int
+    per_photo: int
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok"]
     version: str
