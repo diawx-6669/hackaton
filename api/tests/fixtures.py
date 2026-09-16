@@ -57,12 +57,16 @@ def _page(
     lon: float | None = None,
     license_: str | None = "CC BY-SA 4.0",
     author: str = "Jane Doe",
+    categories: list[str] | None = None,
+    description: str = "",
 ) -> dict[str, Any]:
     name = title.split(":", 1)[1].replace(" ", "_")
     extmeta: dict[str, Any] = {
         "Artist": {"value": f'<a href="/wiki/User:JD">{author}</a>'},
         "DateTimeOriginal": {"value": "2023-05-14 11:20:00"},
     }
+    if description:
+        extmeta["ImageDescription"] = {"value": description}
     if license_:
         extmeta["LicenseShortName"] = {"value": license_}
         extmeta["LicenseUrl"] = {"value": "https://creativecommons.org/licenses/by-sa/4.0/"}
@@ -83,6 +87,8 @@ def _page(
             }
         ],
     }
+    if categories:
+        page["categories"] = [{"ns": 14, "title": f"Category:{c}"} for c in categories]
     if lat is not None and lon is not None:
         page["coordinates"] = [{"lat": lat, "lon": lon, "primary": ""}]
     return page
@@ -92,8 +98,20 @@ def _page(
 SHARED = "File:KBTU main building.jpg"
 
 PAGES: dict[str, Any] = {
-    SHARED: _page(SHARED, lat=43.2361, lon=76.9291),
-    "File:KBTU library.jpg": _page("File:KBTU library.jpg"),
+    SHARED: _page(
+        SHARED,
+        lat=43.2361,
+        lon=76.9291,
+        categories=["Kazakh-British Technical University"],
+        description="Main building of the Kazakh-British Technical University",
+    ),
+    "File:KBTU library.jpg": _page(
+        "File:KBTU library.jpg", categories=["Kazakh-British Technical University"]
+    ),
+    "File:KBTU dormitory.jpg": _page(
+        "File:KBTU dormitory.jpg",
+        categories=["Kazakh-British Technical University", "Dormitories in Almaty"],
+    ),
     "File:KBTU logo.svg": _page("File:KBTU logo.svg", mime="image/svg+xml", width=512, height=512),
     "File:KBTU tiny.jpg": _page("File:KBTU tiny.jpg", width=120, height=90),
     "File:KBTU nolicense.jpg": _page("File:KBTU nolicense.jpg", license_=None),
@@ -105,6 +123,7 @@ COMMONS_FIXTURES: dict[str, Any] = {
         CATEGORY: [
             {"title": SHARED, "ns": 6},
             {"title": "File:KBTU library.jpg", "ns": 6},
+            {"title": "File:KBTU dormitory.jpg", "ns": 6},
             {"title": "File:KBTU logo.svg", "ns": 6},
             {"title": "File:KBTU tiny.jpg", "ns": 6},
             {"title": "File:KBTU nolicense.jpg", "ns": 6},

@@ -63,6 +63,7 @@ class PhotoCategory(str, Enum):
 
 
 class RejectReason(str, Enum):
+    NOT_THIS_UNIVERSITY = "not_this_university"
     NOT_A_PHOTO = "not_a_photo"
     STOCK_DOMAIN = "stock_domain"
     DUPLICATE = "duplicate"
@@ -96,6 +97,10 @@ class Evidence(BaseModel):
     )
     domain: Optional[str] = None
     source_count: int = Field(default=1, description="В скольких источниках встретилось фото")
+    name_mentions: list[str] = Field(
+        default_factory=list, description="Названия вуза, найденные в метаданных файла"
+    )
+    age_years: Optional[float] = Field(default=None, description="Возраст снимка в годах")
     classifier_confidence: Optional[float] = Field(
         default=None, description="Уверенность zero-shot классификатора (шаг 5)"
     )
@@ -119,7 +124,16 @@ class Photo(BaseModel):
     width: Optional[int] = None
     height: Optional[int] = None
     mime: Optional[str] = None
+    description: Optional[str] = None
+    commons_categories: list[str] = Field(default_factory=list)
     category: PhotoCategory = PhotoCategory.UNKNOWN
+    category_source: Optional[str] = Field(
+        default=None, description="Чем определена категория: metadata | clip"
+    )
+    category_terms: list[str] = Field(
+        default_factory=list, description="Слова, по которым сработал классификатор"
+    )
+    stale: bool = Field(default=False, description="Снимку больше 5 лет — может быть устаревшим")
     confidence: float = 0.0
     evidence: Evidence = Field(default_factory=Evidence)
     phash: Optional[str] = None
@@ -133,6 +147,7 @@ class Stage(str, Enum):
     COLLECTING = "collecting"
     FOUND = "found"
     DEDUPED = "deduped"
+    CLASSIFIED = "classified"
     REJECTED = "rejected"
     VERIFIED = "verified"
     DONE = "done"
@@ -172,3 +187,4 @@ class Profile(BaseModel):
 class HealthResponse(BaseModel):
     status: Literal["ok"]
     version: str
+    cache: dict[str, int] = Field(default_factory=dict)

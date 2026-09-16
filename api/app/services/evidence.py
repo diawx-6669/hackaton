@@ -6,11 +6,22 @@
 """
 from __future__ import annotations
 
+import datetime as dt
 import math
-from typing import Optional
+import re
+from typing import Iterable, Optional
 from urllib.parse import urlparse
 
-from app.models import Coordinates, Evidence, EvidenceSignal, Photo, RejectReason, SourceKind
+from app.models import (
+    Coordinates,
+    Evidence,
+    EvidenceSignal,
+    Photo,
+    PhotoCategory,
+    RejectReason,
+    SourceKind,
+)
+from app.services.classify import mentions_university
 
 # Стоковые фотобанки — по ТЗ такие источники отклоняем.
 STOCK_DOMAINS = {
@@ -28,6 +39,31 @@ REVIEW_THRESHOLD = 0.38
 
 # Дальше этого расстояния от координат кампуса фото точно не про кампус.
 MAX_CAMPUS_DISTANCE_M = 3000.0
+
+# Снимок старше этого возраста помечаем как возможно устаревший (п.5 ТЗ).
+STALE_AFTER_YEARS = 5.0
+
+_YEAR_RE = re.compile(r"(1[89]\d{2}|20[0-9]{2})")
+
+
+def photo_age_years(date: str | None) -> Optional[float]:
+    """Возраст снимка в годах по дате из метаданных. None, если даты нет."""
+    if not date:
+        return None
+    m = _YEAR_RE.search(date)
+    if not m:
+        return None
+    year = int(m.group(1))
+    now = dt.datetime.now(dt.timezone.utc).year
+    if year > now:
+        return None
+    return float(now - year)
+
+
+def metadata_blob(photo: Photo) -> str:
+    """Весь текст, который Commons знает о файле, — вход для классификатора и улик."""
+    parts = [photo.title.replace("_", " "), photo.description or "", *photo.commons_categories]
+    return " ".join(p for p in parts if p)
 
 
 def haversine_m(a: Coordinates, b: Coordinates) -> float:
@@ -81,6 +117,7 @@ def score_photo(
     photo: Photo,
     campus: Coordinates | None,
     official_site: str | None,
+    university_names: Iterable[str] = (),
 ) -> Photo:
     """Считает Confidence Score и заполняет разбор улик."""
     ev = Evidence(
@@ -140,7 +177,46 @@ def score_photo(
         )
     )
 
-    # 4. Повтор в нескольких источниках
+    # 4. Название вуза в метаданных файла (имя, подпись, категории Commons)
+    blob = metadata_blob(photo)
+    mentions = mentions_university(blob, university_names)
+    ev.name_mentions = mentions
+    signals.append(
+        EvidenceSignal(
+            key="metadata",
+            label="Вуз в метаданных",
+            value=1.0 if mentions else 0.25,
+            weight=0.15,
+            detail=(
+                f"название вуза найдено в метаданных: {', '.join(mentions[:2])}"
+                if mentions
+                else "название вуза в имени файла, подписи и категориях не встречается"
+            ),
+        )
+    )
+
+    # 5. Свежесть снимка
+    age = photo_age_years(photo.date)
+    ev.age_years = age
+    if age is not None:
+        photo.stale = age > STALE_AFTER_YEARS
+        signals.append(
+            EvidenceSignal(
+                key="freshness",
+                label="Свежесть",
+                value=round(max(0.0, 1.0 - max(0.0, age - STALE_AFTER_YEARS) / 15.0), 3),
+                weight=0.05,
+                detail=(
+                    f"снимку ~{age:.0f} лет — может быть устаревшим"
+                    if photo.stale
+                    else f"снимку ~{age:.0f} лет"
+                ),
+            )
+        )
+    else:
+        ev.notes.append("У файла нет даты — свежесть не оценивалась")
+
+    # 6. Повтор в нескольких источниках
     n = max(1, ev.source_count)
     signals.append(
         EvidenceSignal(
@@ -152,19 +228,28 @@ def score_photo(
         )
     )
 
-    # 5. Классификатор (шаг 5) — участвует, только когда реально посчитан
+    # 7. Классификатор — участвует, только когда реально посчитан
     if ev.classifier_confidence is not None:
+        source = "по метаданным" if photo.category_source == "metadata" else "CLIP"
+        terms = f" (по словам: {', '.join(photo.category_terms[:3])})" if photo.category_terms else ""
         signals.append(
             EvidenceSignal(
                 key="classifier",
                 label="Классификатор",
                 value=round(ev.classifier_confidence, 3),
                 weight=0.20,
-                detail=f"уверенность модели в категории «{photo.category.value}»",
+                detail=f"категория «{photo.category.value}» определена {source}{terms}",
             )
         )
     else:
-        ev.notes.append("Zero-shot классификатор ещё не подключён (шаг 5) — сигнал не учитывался")
+        ev.notes.append("Категорию определить не удалось — сигнал классификатора не учитывался")
+
+    if photo.category is PhotoCategory.JUNK and photo.reject_reason is None:
+        photo.reject_reason = RejectReason.JUNK_CLASS
+        photo.reject_detail = (
+            "Похоже на логотип/схему/документ, а не на фото кампуса"
+            + (f" (по словам: {', '.join(photo.category_terms[:3])})" if photo.category_terms else "")
+        )
 
     total_weight = sum(s.weight for s in signals) or 1.0
     score = sum(s.value * s.weight for s in signals) / total_weight
@@ -174,8 +259,18 @@ def score_photo(
     photo.confidence = round(score, 3)
 
     if photo.reject_reason is None and score < REVIEW_THRESHOLD:
-        photo.reject_reason = RejectReason.LOW_CONFIDENCE
-        photo.reject_detail = f"Низкий Confidence Score ({score:.2f})"
+        # Разделяем «слабые улики вообще» и «скорее всего это другой вуз»:
+        # жюри должно видеть внятную причину, а не общее «низкий балл».
+        wrong_university = not mentions and SourceKind.COMMONS_CATEGORY not in photo.source_kinds
+        if wrong_university:
+            photo.reject_reason = RejectReason.NOT_THIS_UNIVERSITY
+            photo.reject_detail = (
+                f"Ничто не связывает фото с этим вузом: найдено только по геопоиску, "
+                f"названия вуза в метаданных нет (балл {score:.2f})"
+            )
+        else:
+            photo.reject_reason = RejectReason.LOW_CONFIDENCE
+            photo.reject_detail = f"Низкий Confidence Score ({score:.2f})"
     return photo
 
 

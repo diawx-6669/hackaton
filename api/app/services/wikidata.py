@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from app.config import get_settings
 from app.models import Coordinates, University
+from app.services.cache import get_cache
 from app.services.http import get_json
 from app.services.textmatch import expand_query, similarity
 
@@ -185,7 +186,27 @@ def _looks_like_institution(name: str, description: str | None) -> bool:
 
 
 async def resolve(query: str, limit: int = 8) -> list[University]:
-    """Возвращает отсортированный список кандидатов-вузов."""
+    """Возвращает отсортированный список кандидатов-вузов (с кешем)."""
+    s = get_settings()
+    if not s.cache_enabled:
+        return await _resolve_uncached(query, limit)
+
+    cache = get_cache()
+    key = cache.key("resolve", query.strip().lower(), limit)
+    raw = await cache.get_or_set(
+        key,
+        s.cache_ttl_resolve,
+        lambda: _resolve_and_dump(query, limit),
+    )
+    return [University.model_validate(item) for item in raw]
+
+
+async def _resolve_and_dump(query: str, limit: int) -> list[dict[str, Any]]:
+    results = await _resolve_uncached(query, limit)
+    return [u.model_dump(mode="json") for u in results]
+
+
+async def _resolve_uncached(query: str, limit: int = 8) -> list[University]:
     hits = await search_entities(query)
     if not hits:
         return []

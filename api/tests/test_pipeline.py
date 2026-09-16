@@ -122,3 +122,36 @@ async def test_wikidata_down_is_reported_as_source_failure(api_mock):
     # Недоступный источник не должен выглядеть как «такого вуза нет».
     assert "не найден" not in last.message
     assert "Wikidata" in last.message
+
+
+async def test_photos_land_in_their_categories(full_mock):
+    events = await collect_events(qid=fixtures.QID)
+    profile = events[-1].payload
+
+    by_cat = {b["category"]: b for b in profile["by_category"]}
+    dorm_titles = [p["title"] for p in by_cat["dorms"]["photos"]]
+    library_titles = [p["title"] for p in by_cat["libraries"]["photos"]]
+    assert any("dormitory" in t for t in dorm_titles)
+    assert any("library" in t for t in library_titles)
+
+    # Категория подписана источником — не выдаём эвристику за CLIP.
+    for bucket in profile["by_category"]:
+        for photo in bucket["photos"]:
+            assert photo["category_source"] == "metadata"
+
+    # Пустая категория честно объясняет, что подтверждённых фото нет.
+    empty = [b for b in profile["by_category"] if not b["photos"]]
+    assert all("не найдено" in b["empty_reason"] for b in empty)
+
+
+async def test_logo_is_rejected_as_junk_not_just_as_svg(full_mock):
+    events = await collect_events(qid=fixtures.QID)
+    rejected = {p["title"]: p for p in events[-1].payload["rejected"]}
+    logo = rejected["KBTU logo.svg"]
+    assert logo["reject_reason"] and logo["reject_detail"]
+
+
+async def test_classified_stage_is_streamed(full_mock):
+    events = await collect_events(qid=fixtures.QID)
+    classified = [e for e in events if e.stage is Stage.CLASSIFIED]
+    assert classified and classified[0].counts["classified"] >= 2

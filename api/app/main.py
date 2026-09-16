@@ -10,9 +10,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.models import HealthResponse
 from app.routers import profile, resolve
+from app.services.cache import get_cache
 from app.services.http import close_client
 
-VERSION = "0.3.0"
+VERSION = "0.5.0"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,4 +50,4 @@ app.include_router(profile.router, prefix="/api")
 
 @app.get("/api/health", response_model=HealthResponse, tags=["meta"])
 async def health() -> HealthResponse:
-    return HealthResponse(status="ok", version=VERSION)
+    return HealthResponse(status="ok", version=VERSION, cache=get_cache().stats())

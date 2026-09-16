@@ -27,6 +27,12 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:3000"
 
+    # Кеш: экономит время жюри на повторных запросах и бережёт лимиты Wikimedia.
+    cache_enabled: bool = True
+    cache_dir: str = "data/cache"
+    cache_ttl_resolve: float = 86400.0   # метаданные вуза меняются редко
+    cache_ttl_photos: float = 21600.0    # состав категории Commons — чаще
+
     wikidata_api: str = "https://www.wikidata.org/w/api.php"
     wikidata_sparql: str = "https://query.wikidata.org/sparql"
     commons_api: str = "https://commons.wikimedia.org/w/api.php"

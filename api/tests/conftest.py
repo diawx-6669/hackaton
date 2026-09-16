@@ -8,6 +8,7 @@ import httpx
 import pytest
 import respx
 
+from app.services.cache import TTLCache, set_cache
 from app.services.http import close_client
 
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
@@ -16,9 +17,12 @@ COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 
 
 @pytest.fixture(autouse=True)
-async def _reset_http_client():
+async def _reset_state():
+    """Каждый тест стартует с чистым HTTP-клиентом и пустым кешем в памяти."""
+    set_cache(TTLCache(directory=None))
     await close_client()
     yield
+    set_cache(TTLCache(directory=None))
     await close_client()
 
 

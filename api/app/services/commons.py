@@ -9,6 +9,7 @@ from typing import Any, Iterable, Optional
 
 from app.config import get_settings
 from app.models import Coordinates, Photo, RejectReason, SourceKind
+from app.services.cache import get_cache
 from app.services.http import get_json
 
 log = logging.getLogger(__name__)
@@ -127,11 +128,13 @@ async def image_info(titles: list[str]) -> dict[str, dict[str, Any]]:
             _api(
                 {
                     "titles": "|".join(batch),
-                    "prop": "imageinfo|coordinates",
+                    "prop": "imageinfo|coordinates|categories",
                     "iiprop": "url|extmetadata|user|timestamp|mime|size|canonicaltitle",
                     "iiurlwidth": 640,
                     "iiextmetadatalanguage": "ru",
                     "colimit": "max",
+                    "cllimit": "max",
+                    "clshow": "!hidden",
                 }
             )
             for batch in batches
@@ -154,6 +157,25 @@ def _extmeta(page: dict[str, Any], key: str) -> Optional[str]:
     meta = info.get("extmetadata") or {}
     val = (meta.get(key) or {}).get("value")
     return strip_html(val) if isinstance(val, str) else None
+
+
+def _categories(page: dict[str, Any]) -> list[str]:
+    """Категории Commons, в которых лежит файл, — сырьё для классификатора."""
+    out: list[str] = []
+    for c in page.get("categories") or []:
+        title = c.get("title") or ""
+        if title.lower().startswith("category:"):
+            title = title.split(":", 1)[1]
+        if title:
+            out.append(title)
+    # extmetadata тоже отдаёт категории строкой через | — на случай, если prop не пришёл
+    raw = _extmeta(page, "Categories")
+    if raw:
+        for part in raw.split("|"):
+            part = part.strip()
+            if part and part not in out:
+                out.append(part)
+    return out
 
 
 def _coords(page: dict[str, Any]) -> Optional[Coordinates]:
@@ -196,6 +218,8 @@ def page_to_photo(page: dict[str, Any], source: SourceKind) -> Optional[Photo]:
         license_url=(info.get("extmetadata", {}).get("LicenseUrl", {}) or {}).get("value"),
         date=(_extmeta(page, "DateTimeOriginal") or info.get("timestamp") or "")[:25] or None,
         coordinates=_coords(page),
+        description=_extmeta(page, "ImageDescription") or _extmeta(page, "ObjectName"),
+        commons_categories=_categories(page),
         width=info.get("width"),
         height=info.get("height"),
         mime=info.get("mime"),
@@ -223,7 +247,39 @@ async def collect(
     coordinates: Coordinates | None,
     radius: int | None = None,
 ) -> list[Photo]:
-    """Оба сборщика Commons параллельно, результат — список Photo с источниками."""
+    """Оба сборщика Commons параллельно, с кешем по ключу источника."""
+    s = get_settings()
+    if not s.cache_enabled:
+        return await _collect_uncached(
+            commons_category=commons_category, coordinates=coordinates, radius=radius
+        )
+
+    cache = get_cache()
+    key = cache.key(
+        "commons",
+        commons_category or "-",
+        f"{coordinates.lat:.4f},{coordinates.lon:.4f}" if coordinates else "-",
+        radius or s.geosearch_radius,
+        s.max_files_per_source,
+        s.category_depth,
+    )
+
+    async def produce() -> list[dict[str, Any]]:
+        photos = await _collect_uncached(
+            commons_category=commons_category, coordinates=coordinates, radius=radius
+        )
+        return [p.model_dump(mode="json") for p in photos]
+
+    raw = await cache.get_or_set(key, s.cache_ttl_photos, produce)
+    return [Photo.model_validate(item) for item in raw]
+
+
+async def _collect_uncached(
+    *,
+    commons_category: str | None,
+    coordinates: Coordinates | None,
+    radius: int | None = None,
+) -> list[Photo]:
     tasks: list[asyncio.Task[tuple[SourceKind, list[str]]]] = []
 
     async def _cat() -> tuple[SourceKind, list[str]]:

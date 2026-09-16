@@ -22,6 +22,7 @@ from app.models import (
     University,
 )
 from app.services import commons, dedup, evidence, wikidata
+from app.services.classify import classify
 
 log = logging.getLogger(__name__)
 
@@ -270,8 +271,28 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
         counts={"unique": len(unique), "duplicates": len(duplicates)},
     )
 
+    # --- классификация по категориям ---
+    for photo in unique:
+        result = classify(photo)
+        if result.category is not PhotoCategory.UNKNOWN:
+            photo.category = result.category
+            photo.category_source = "metadata"
+            photo.category_terms = result.matched
+            photo.evidence.classifier_confidence = result.confidence
+
+    classified = sum(1 for p in unique if p.category is not PhotoCategory.UNKNOWN)
+    yield StageEvent(
+        stage=Stage.CLASSIFIED,
+        message=f"Категории определены: {classified} из {len(unique)}",
+        elapsed_ms=clock.elapsed_ms,
+        counts={"classified": classified, "unclassified": len(unique) - classified},
+    )
+
     # --- оценка достоверности ---
-    scored = [evidence.score_photo(p, uni.coordinates, uni.website) for p in unique]
+    names = [uni.name, *uni.aliases]
+    if uni.commons_category:
+        names.append(uni.commons_category)
+    scored = [evidence.score_photo(p, uni.coordinates, uni.website, names) for p in unique]
     verified: list[Photo] = []
     needs_review: list[Photo] = []
     rejected: list[Photo] = list(duplicates)
@@ -287,11 +308,19 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
     verified.sort(key=lambda p: p.confidence, reverse=True)
     needs_review.sort(key=lambda p: p.confidence, reverse=True)
 
+    reject_counts: dict[str, int] = {}
+    for photo in rejected:
+        key = photo.reject_reason.value if photo.reject_reason else "unknown"
+        reject_counts[key] = reject_counts.get(key, 0) + 1
+
     yield StageEvent(
         stage=Stage.REJECTED,
-        message=f"Отклонено: {len(rejected)}",
+        message="Отклонено: " + (
+            ", ".join(f"{k} −{v}" for k, v in sorted(reject_counts.items()))
+            or "ничего"
+        ),
         elapsed_ms=clock.elapsed_ms,
-        counts={"rejected": len(rejected)},
+        counts={"rejected": len(rejected), **reject_counts},
     )
 
     if not verified and not needs_review:
@@ -302,7 +331,7 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
         verified=verified,
         needs_review=needs_review,
         rejected=rejected,
-        by_category=_make_buckets(verified, classification_ready=False),
+        by_category=_make_buckets(verified, classification_ready=True),
         stats={
             "found": len(collected),
             "unique": len(unique),
