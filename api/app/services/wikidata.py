@@ -26,10 +26,14 @@ SEARCH_LANGUAGES = ("ru", "en", "kk")
 _POINT_RE = re.compile(r"Point\(\s*(-?[\d.]+)\s+(-?[\d.]+)\s*\)")
 
 _DETAILS_SPARQL = """
-SELECT ?item ?itemLabel ?itemDescription ?coord ?cityCoord ?website ?commonsCat
-       ?cityLabel ?countryLabel ?logo ?inception ?isEdu
+SELECT ?item ?itemLabel ?itemDescription ?enLabel ?alias ?coord ?cityCoord ?website
+       ?commonsCat ?cityLabel ?countryLabel ?logo ?inception ?isEdu
 WHERE {
   VALUES ?item { %(values)s }
+  # Английское название и алиасы нужны не для показа, а как улика: файлы на
+  # Commons почти всегда подписаны по-английски или аббревиатурой (KBTU).
+  OPTIONAL { ?item rdfs:label ?enLabel . FILTER(lang(?enLabel) = "en") }
+  OPTIONAL { ?item skos:altLabel ?alias . FILTER(lang(?alias) IN ("ru", "en", "kk")) }
   OPTIONAL { ?item wdt:P625 ?coord . }
   OPTIONAL { ?item wdt:P856 ?website . }
   OPTIONAL { ?item wdt:P373 ?commonsCat . }
@@ -160,6 +164,13 @@ async def fetch_details(qids: list[str]) -> dict[str, dict[str, Any]]:
 
         take("itemLabel", "label")
         take("itemDescription", "description")
+        take("enLabel", "en_label")
+
+        alias = row.get("alias", {}).get("value")
+        if alias:
+            aliases = rec.setdefault("aliases", [])
+            if alias not in aliases:
+                aliases.append(alias)
         take("coord", "coord")
         take("cityCoord", "city_coord")
         take("website", "website")
@@ -172,6 +183,22 @@ async def fetch_details(qids: list[str]) -> dict[str, dict[str, Any]]:
         if is_edu is not None:
             rec["is_edu"] = is_edu in ("true", "1")
     return out
+
+
+def _merge_aliases(name: str, search_aliases: list[str], details: dict[str, Any]) -> list[str]:
+    """Все известные имена вуза: из поиска, английская метка и altLabel из Wikidata.
+
+    Именно по ним потом ищется упоминание вуза в метаданных файла, поэтому
+    английское название и аббревиатуры здесь важнее, чем для показа.
+    """
+    merged: list[str] = []
+    for candidate in [*search_aliases, details.get("en_label"), *details.get("aliases", [])]:
+        if not candidate:
+            continue
+        text = candidate.strip()
+        if text and text != name and text not in merged:
+            merged.append(text)
+    return merged[:12]
 
 
 def _looks_like_institution(name: str, description: str | None) -> bool:
@@ -227,6 +254,7 @@ async def _resolve_uncached(query: str, limit: int = 8) -> list[University]:
         det = details.get(qid, {})
         name = det.get("label") or hit["label"]
         description = hit.get("description") or det.get("description")
+        aliases = _merge_aliases(name, hit.get("aliases", []), det)
 
         is_edu = det.get("is_edu")
         if is_edu is False:
@@ -245,7 +273,7 @@ async def _resolve_uncached(query: str, limit: int = 8) -> list[University]:
                 id=qid,
                 name=name,
                 description=description,
-                aliases=hit.get("aliases", []),
+                aliases=aliases,
                 city=det.get("city"),
                 country=det.get("country"),
                 coordinates=coords,
@@ -254,7 +282,7 @@ async def _resolve_uncached(query: str, limit: int = 8) -> list[University]:
                 logo_url=det.get("logo"),
                 inception=(det.get("inception") or "")[:10] or None,
                 wikidata_url=f"https://www.wikidata.org/wiki/{qid}",
-                match_score=similarity(query, name, *hit.get("aliases", [])),
+                match_score=similarity(query, name, *aliases),
             )
         )
 

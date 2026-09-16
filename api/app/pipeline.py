@@ -77,10 +77,12 @@ async def _resolve_target(q: str | None, qid: str | None) -> tuple[Optional[Univ
         coords = wikidata.parse_point(det.get("coord")) or wikidata.parse_point(
             det.get("city_coord")
         )
+        name = det.get("label") or qid
         uni = University(
             id=qid,
-            name=det.get("label") or qid,
+            name=name,
             description=det.get("description"),
+            aliases=wikidata._merge_aliases(name, [], det),
             city=det.get("city"),
             country=det.get("country"),
             coordinates=coords,
@@ -281,9 +283,14 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
                 counts={"found_total": len(collected), "from_source": len(photos)},
             )
 
-    for task in pending:
-        task.cancel()
-        warnings.append(f"Источник «{tasks[task]}» не уложился в {settings.total_timeout:.0f} с")
+    if pending:
+        for task in pending:
+            task.cancel()
+            warnings.append(
+                f"Источник «{tasks[task]}» не уложился в {settings.total_timeout:.0f} с"
+            )
+        # Дожидаемся отмены, иначе asyncio сыпет «Task exception was never retrieved».
+        await asyncio.gather(*pending, return_exceptions=True)
 
     yield StageEvent(
         stage=Stage.FOUND,
@@ -323,6 +330,11 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
     if uni.commons_category:
         names.append(uni.commons_category)
     scored = [evidence.score_photo(p, uni.coordinates, uni.website, names) for p in unique]
+    # Дубли тоже считаем: причина отказа у них уже стоит и не перезапишется,
+    # зато в карточке будет нормальный разбор улик, а не пустой блок.
+    for duplicate in duplicates:
+        evidence.score_photo(duplicate, uni.coordinates, uni.website, names)
+
     verified: list[Photo] = []
     needs_review: list[Photo] = []
     rejected: list[Photo] = list(duplicates)

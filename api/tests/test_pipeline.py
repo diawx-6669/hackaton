@@ -155,3 +155,24 @@ async def test_classified_stage_is_streamed(full_mock):
     events = await collect_events(qid=fixtures.QID)
     classified = [e for e in events if e.stage is Stage.CLASSIFIED]
     assert classified and classified[0].counts["classified"] >= 2
+
+
+async def test_qid_entry_still_knows_university_aliases(full_mock):
+    """Вход по постоянной ссылке /u/QID не должен терять алиасы вуза."""
+    events = await collect_events(qid=fixtures.QID)
+    uni = events[-1].payload["university"]
+    assert "KBTU" in uni["aliases"]
+
+    # Файлы на Commons подписаны по-английски — улика обязана срабатывать.
+    verified = events[-1].payload["verified"]
+    assert verified
+    assert any(p["evidence"]["name_mentions"] for p in verified)
+
+
+async def test_duplicates_carry_evidence_too(full_mock):
+    events = await collect_events(qid=fixtures.QID)
+    dups = [p for p in events[-1].payload["rejected"] if p["reject_reason"] == "duplicate"]
+    assert dups, "в фикстурах есть файл из двух источников"
+    for photo in dups:
+        assert photo["evidence"]["signals"], "у дубликата тоже должен быть разбор улик"
+        assert photo["reject_reason"] == "duplicate", "причина отказа не должна перезаписаться"

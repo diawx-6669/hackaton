@@ -51,3 +51,12 @@ def test_parse_point():
     c = wikidata.parse_point("Point(76.929 43.236)")
     assert c is not None and (c.lat, c.lon) == (43.236, 76.929)
     assert wikidata.parse_point(None) is None
+
+
+async def test_aliases_and_english_label_are_collected(wikidata_mock):
+    """Английское имя и аббревиатура — главная улика для файлов Commons."""
+    top = (await wikidata.resolve("КБТУ"))[0]
+    assert "Kazakh-British Technical University" in top.aliases
+    assert "KBTU" in top.aliases
+    assert "КБТУ" in top.aliases
+    assert top.name not in top.aliases, "название не должно дублироваться в алиасах"
