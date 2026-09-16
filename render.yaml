@@ -1,0 +1,22 @@
+# Деплой бэкенда на Render. Фронтенд идёт на Vercel (root directory: web).
+services:
+  - type: web
+    name: campuslens-api
+    runtime: docker
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: ./api
+    healthCheckPath: /api/health
+    plan: free
+    envVars:
+      # Wikimedia требует контактный User-Agent — подставь свою почту.
+      - key: CAMPUSLENS_USER_AGENT
+        sync: false
+      # Адрес фронтенда на Vercel, например https://campuslens.vercel.app
+      - key: CAMPUSLENS_CORS_ORIGINS
+        sync: false
+      - key: CAMPUSLENS_TOTAL_TIMEOUT
+        value: "25"
+      - key: CAMPUSLENS_CACHE_ENABLED
+        value: "true"
+      - key: CAMPUSLENS_CACHE_DIR
+        value: /app/data/cache
