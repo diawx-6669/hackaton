@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from sse_starlette.sse import EventSourceResponse
 
 from app.models import Profile, Stage
-from app.pipeline import stream_profile
+from app.pipeline import build_profile, stream_profile
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["profile"])
@@ -25,8 +25,10 @@ async def profile_stream(
     request: Request,
     q: str | None = Query(None, min_length=2, max_length=200),
     id: str | None = Query(None, pattern=r"^Q\d+$", description="Wikidata QID, если вуз уже выбран"),
+    qid: str | None = Query(None, pattern=r"^Q\d+$", description="Синоним id (как в ТЗ)"),
 ) -> EventSourceResponse:
     """Server-Sent Events. Каждое событие — этап воронки с таймером."""
+    id = id or qid
     _validate(q, id)
 
     async def event_source():
@@ -57,21 +59,17 @@ async def profile_stream(
 async def profile_json(
     q: str | None = Query(None, min_length=2, max_length=200),
     id: str | None = Query(None, pattern=r"^Q\d+$"),
+    qid: str | None = Query(None, pattern=r"^Q\d+$"),
 ) -> Profile:
     """Тот же конвейер, но одним ответом — удобно для тестов и curl."""
+    id = id or qid
     _validate(q, id)
-    last_payload = None
-    last_message = "Профиль не собран"
-    async for event in stream_profile(q=q, qid=id):
-        if event.stage is Stage.DONE and event.payload:
-            last_payload = event.payload
-        elif event.stage in (Stage.ERROR, Stage.RESOLVED):
-            last_message = event.message
-            if event.payload and event.payload.get("needs_choice"):
-                raise HTTPException(
-                    status_code=300,
-                    detail={"message": event.message, "candidates": event.payload["candidates"]},
-                )
-    if last_payload is None:
-        raise HTTPException(status_code=404, detail=last_message)
-    return Profile.model_validate(last_payload)
+    profile, last = await build_profile(q=q, qid=id)
+    if profile is not None:
+        return profile
+    if last.payload and last.payload.get("needs_choice"):
+        raise HTTPException(
+            status_code=300,
+            detail={"message": last.message, "candidates": last.payload["candidates"]},
+        )
+    raise HTTPException(status_code=404, detail=last.message)

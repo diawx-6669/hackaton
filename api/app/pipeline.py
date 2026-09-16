@@ -136,6 +136,22 @@ def _make_buckets(photos: list[Photo], classification_ready: bool) -> list[Categ
     return buckets
 
 
+async def build_profile(q: str | None = None, qid: str | None = None) -> tuple[Optional[Profile], StageEvent]:
+    """Прогоняет тот же конвейер до конца и отдаёт готовый профиль.
+
+    Возвращает (профиль, последнее событие): по последнему событию видно,
+    что именно случилось — ошибка, требование выбрать вуз или успех.
+    """
+    last: StageEvent | None = None
+    profile: Profile | None = None
+    async for event in stream_profile(q=q, qid=qid):
+        last = event
+        if event.stage is Stage.DONE and event.payload:
+            profile = Profile.model_validate(event.payload)
+    assert last is not None
+    return profile, last
+
+
 async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncIterator[StageEvent]:
     """Асинхронный генератор этапов: найдено → дубли → отклонено → проверено."""
     settings = get_settings()

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.models import HealthResponse
-from app.routers import profile, resolve
+from app.routers import compare, profile, resolve
 from app.services.cache import get_cache
 from app.services.http import close_client
 
@@ -46,6 +46,7 @@ app.add_middleware(
 
 app.include_router(resolve.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
+app.include_router(compare.router, prefix="/api")
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["meta"])

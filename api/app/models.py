@@ -184,6 +184,23 @@ class Profile(BaseModel):
     took_ms: int = 0
 
 
+class ComparisonRow(BaseModel):
+    """Одна строка таблицы сравнения двух вузов."""
+
+    key: str
+    label: str
+    a: str
+    b: str
+    winner: Optional[Literal["a", "b", "tie"]] = None
+
+
+class Comparison(BaseModel):
+    a: Profile
+    b: Profile
+    rows: list[ComparisonRow] = Field(default_factory=list)
+    took_ms: int = 0
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok"]
     version: str
