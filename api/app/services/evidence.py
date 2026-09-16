@@ -23,6 +23,20 @@ from app.models import (
 )
 from app.services.classify import mentions_university
 
+# Человеческие названия категорий для текста улики.
+CATEGORY_LABELS: dict[PhotoCategory, str] = {
+    PhotoCategory.CAMPUS: "Кампус",
+    PhotoCategory.DORMS: "Общежития",
+    PhotoCategory.CLASSROOMS: "Аудитории",
+    PhotoCategory.LIBRARIES: "Библиотеки",
+    PhotoCategory.LABS: "Лаборатории",
+    PhotoCategory.SPORTS: "Спорт",
+    PhotoCategory.STUDENT_LIFE: "Студенческая жизнь",
+    PhotoCategory.CITY: "Город",
+    PhotoCategory.JUNK: "Мусор",
+    PhotoCategory.UNKNOWN: "Без категории",
+}
+
 # Стоковые фотобанки — по ТЗ такие источники отклоняем.
 STOCK_DOMAINS = {
     "shutterstock.com", "gettyimages.com", "istockphoto.com", "depositphotos.com",
@@ -238,7 +252,10 @@ def score_photo(
                 label="Классификатор",
                 value=round(ev.classifier_confidence, 3),
                 weight=0.20,
-                detail=f"категория «{photo.category.value}» определена {source}{terms}",
+                detail=(
+                f"категория «{CATEGORY_LABELS.get(photo.category, photo.category.value)}» "
+                f"определена {source}{terms}"
+            ),
             )
         )
     else:

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { REJECT_LABELS, SOURCE_LABELS, type Photo } from "@/lib/types";
+import { CATEGORY_LABELS, REJECT_LABELS, SOURCE_LABELS, type Photo } from "@/lib/types";
 
 function confidenceColor(c: number): string {
   if (c >= 0.62) return "var(--ok)";
@@ -17,18 +17,17 @@ function hostOf(url: string): string {
   }
 }
 
-export function PhotoCard({ photo }: { photo: Photo }) {
+export function PhotoCard({ photo, onOpen }: { photo: Photo; onOpen?: (p: Photo) => void }) {
   const [openEvidence, setOpenEvidence] = useState(false);
   const rejected = Boolean(photo.reject_reason);
 
   return (
     <article className="flex flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
-      <a
-        href={photo.source_page_url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="relative block aspect-[4/3] bg-[var(--surface-2)]"
-        title="Открыть страницу-источник"
+      <button
+        type="button"
+        onClick={() => onOpen?.(photo)}
+        className="relative block aspect-[4/3] w-full bg-[var(--surface-2)]"
+        title="Открыть фото во весь экран"
       >
         <img
           src={photo.thumb_url || photo.url}
@@ -49,12 +48,22 @@ export function PhotoCard({ photo }: { photo: Photo }) {
             {REJECT_LABELS[photo.reject_reason!] ?? photo.reject_reason}
           </span>
         )}
-      </a>
+        {photo.stale && !rejected && (
+          <span className="absolute bottom-2 left-2 rounded-lg bg-[#08111fdd] px-2 py-1 text-[10px] text-[var(--warn)]">
+            может быть устаревшим
+          </span>
+        )}
+      </button>
 
       <div className="flex flex-1 flex-col gap-2 p-3">
         <h3 className="line-clamp-2 text-sm font-medium" title={photo.title}>
           {photo.title}
         </h3>
+        {photo.category !== "unknown" && (
+          <span className="w-fit rounded-md bg-[var(--surface-2)] px-1.5 py-0.5 text-[11px] text-[var(--muted)]">
+            {CATEGORY_LABELS[photo.category]}
+          </span>
+        )}
 
         {rejected && photo.reject_detail && (
           <p className="text-xs text-[var(--bad)]">Причина: {photo.reject_detail}</p>

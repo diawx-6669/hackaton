@@ -35,6 +35,8 @@ export type EvidenceSignal = {
 
 export type Evidence = {
   signals: EvidenceSignal[];
+  name_mentions: string[];
+  age_years?: number | null;
   geo_distance_m?: number | null;
   domain_trust: number;
   domain?: string | null;
@@ -72,7 +74,12 @@ export type Photo = {
   width?: number | null;
   height?: number | null;
   mime?: string | null;
+  description?: string | null;
+  commons_categories: string[];
   category: PhotoCategory;
+  category_source?: string | null;
+  category_terms: string[];
+  stale: boolean;
   confidence: number;
   evidence: Evidence;
   phash?: string | null;
@@ -99,6 +106,7 @@ export type Profile = {
 };
 
 export type Stage =
+  | "classified"
   | "resolved"
   | "collecting"
   | "found"
@@ -130,6 +138,7 @@ export const CATEGORY_LABELS: Record<PhotoCategory, string> = {
 };
 
 export const REJECT_LABELS: Record<string, string> = {
+  not_this_university: "Не тот вуз",
   not_a_photo: "Не фотография",
   stock_domain: "Стоковый источник",
   duplicate: "Дубликат",
@@ -145,4 +154,19 @@ export const SOURCE_LABELS: Record<string, string> = {
   commons_geosearch: "Геопоиск Commons",
   official_site: "Сайт вуза",
   web_search: "Веб-поиск",
+};
+
+export type ComparisonRow = {
+  key: string;
+  label: string;
+  a: string;
+  b: string;
+  winner?: "a" | "b" | "tie" | null;
+};
+
+export type Comparison = {
+  a: Profile;
+  b: Profile;
+  rows: ComparisonRow[];
+  took_ms: number;
 };

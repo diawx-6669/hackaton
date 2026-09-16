@@ -1,81 +1,67 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CandidatePicker } from "@/components/CandidatePicker";
 import { Funnel } from "@/components/Funnel";
 import { ProfileView } from "@/components/ProfileView";
 import { SearchBar } from "@/components/SearchBar";
-import { streamProfile } from "@/lib/api";
-import type { Profile, StageEvent, University } from "@/lib/types";
+import { useProfileRun } from "@/lib/useProfile";
+
+const PILLARS = [
+  {
+    title: "Только подтверждённое",
+    text: "15 проверенных фото лучше 100 случайных. У каждого снимка — источник, автор и лицензия.",
+  },
+  {
+    title: "Видно, почему поверили",
+    text: "Балл достоверности разложен на улики: геотег, домен, привязка к вузу, свежесть.",
+  },
+  {
+    title: "Честно про пустоту",
+    text: "Если подтверждённых фото по категории нет — так и написано. Ничего не додумываем.",
+  },
+];
 
 export default function Home() {
-  const [events, setEvents] = useState<StageEvent[]>([]);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [candidates, setCandidates] = useState<University[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
-  const [startedAt, setStartedAt] = useState<number | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-
-  const run = useCallback(async (params: { q?: string; id?: string }) => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    setEvents([]);
-    setProfile(null);
-    setCandidates(null);
-    setError(null);
-    setRunning(true);
-    setStartedAt(Date.now());
-
-    try {
-      await streamProfile(
-        params,
-        (event) => {
-          setEvents((prev) => [...prev, event]);
-
-          if (event.stage === "resolved" && event.payload?.needs_choice) {
-            setCandidates(event.payload.candidates as University[]);
-          }
-          if (event.stage === "done" && event.payload) {
-            setProfile(event.payload as unknown as Profile);
-          }
-          if (event.stage === "error") {
-            setError(event.message);
-          }
-        },
-        controller.signal,
-      );
-    } catch (e) {
-      if ((e as Error).name !== "AbortError") {
-        setError(
-          `${(e as Error).message}. Бэкенд поднят на ${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"}?`,
-        );
-      }
-    } finally {
-      setRunning(false);
-    }
-  }, []);
+  const router = useRouter();
+  const { events, profile, candidates, error, running, startedAt, run, cancel } = useProfileRun();
+  const started = events.length > 0 || running;
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-8 sm:px-6 sm:py-12">
-      <header>
-        <h1 className="text-2xl font-bold sm:text-4xl">
-          CampusLens <span className="text-[var(--accent)]">AI</span>
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-[var(--muted)] sm:text-base">
-          Введите название вуза — сервис за считанные секунды соберёт визуальный профиль кампуса
-          из открытых источников: с автором, лицензией, ссылкой на источник и разбором улик.
-          Ничего не захардкожено: всё ищется на лету в Wikidata и Wikimedia Commons.
-        </p>
-      </header>
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6 sm:py-12">
+      {!started && (
+        <section className="flex flex-col gap-4 pt-4 sm:pt-10">
+          <p className="w-fit rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs text-[var(--muted)]">
+            Хакатон LOCUS 2026 · кейс 1
+          </p>
+          <h1 className="text-3xl font-bold leading-tight sm:text-5xl">
+            Университеты показывают рекламу.
+            <br />
+            <span className="text-[var(--accent)]">CampusLens показывает, как там на самом деле.</span>
+          </h1>
+          <p className="max-w-2xl text-base text-[var(--muted)] sm:text-lg">
+            Введите название вуза — меньше чем за 30 секунд соберём визуальный профиль кампуса
+            из открытых источников: кампус, общежития, аудитории, библиотеки, лаборатории, спорт,
+            студенческая жизнь и город.
+          </p>
+        </section>
+      )}
 
-      <SearchBar
-        busy={running}
-        onSearch={(q) => run({ q })}
-        onCancel={() => abortRef.current?.abort()}
-      />
+      <SearchBar busy={running} onSearch={(q) => run({ q })} onCancel={cancel} />
+
+      {!started && (
+        <section className="grid gap-3 sm:grid-cols-3">
+          {PILLARS.map((p) => (
+            <article
+              key={p.title}
+              className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4"
+            >
+              <h2 className="font-semibold">{p.title}</h2>
+              <p className="mt-1 text-sm text-[var(--muted)]">{p.text}</p>
+            </article>
+          ))}
+        </section>
+      )}
 
       {error && (
         <p className="rounded-2xl border border-[var(--bad)]/40 bg-[var(--bad)]/5 p-4 text-sm text-[var(--bad)]">
@@ -86,14 +72,20 @@ export default function Home() {
       <Funnel events={events} running={running} startedAt={startedAt} />
 
       {candidates && !profile && (
-        <CandidatePicker candidates={candidates} onPick={(u) => run({ id: u.id })} />
+        <CandidatePicker
+          candidates={candidates}
+          onPick={(u) => {
+            // Постоянная ссылка на профиль: её можно отправить и открыть заново.
+            router.push(`/u/${u.id}`);
+          }}
+        />
       )}
 
       {profile && <ProfileView profile={profile} />}
 
       <footer className="mt-6 border-t border-[var(--border)] pt-4 text-xs text-[var(--muted)]">
         Данные: Wikidata (CC0) и Wikimedia Commons — лицензия каждого файла указана в карточке.
-        Хакатон LOCUS 2026, кейс 1.
+        Карта: OpenStreetMap.
       </footer>
     </main>
   );

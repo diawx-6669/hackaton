@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     geosearch_radius: int = 1000  # метры
     category_depth: int = 2
 
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     # Кеш: экономит время жюри на повторных запросах и бережёт лимиты Wikimedia.
     cache_enabled: bool = True

@@ -1,8 +1,24 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
+import { Lightbox } from "./Lightbox";
 import { PhotoCard } from "./PhotoCard";
-import { CATEGORY_LABELS, REJECT_LABELS, type PhotoCategory, type Profile } from "@/lib/types";
+import {
+  CATEGORY_LABELS,
+  REJECT_LABELS,
+  type Photo,
+  type PhotoCategory,
+  type Profile,
+} from "@/lib/types";
+
+// Leaflet трогает window, поэтому карта грузится только на клиенте.
+const CampusMap = dynamic(() => import("./CampusMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[360px] animate-pulse rounded-2xl border border-[var(--border)] bg-[var(--surface)] sm:h-[440px]" />
+  ),
+});
 
 type Tab = "verified" | "needs_review" | "rejected";
 
@@ -10,6 +26,16 @@ const TAB_TITLES: Record<Tab, string> = {
   verified: "Проверено",
   needs_review: "⚠️ Требует проверки",
   rejected: "Отклонено",
+};
+
+const STAT_LABELS: Record<string, string> = {
+  found: "найдено",
+  unique: "уникальных",
+  duplicates: "дублей",
+  verified: "проверено",
+  needs_review: "требуют проверки",
+  rejected: "отклонено",
+  sources: "источников",
 };
 
 // Фильтры из ТЗ (п.7) + кампус и город.
@@ -27,6 +53,8 @@ const FILTERS: PhotoCategory[] = [
 export function ProfileView({ profile }: { profile: Profile }) {
   const [tab, setTab] = useState<Tab>("verified");
   const [category, setCategory] = useState<PhotoCategory | "all">("all");
+  const [view, setView] = useState<"gallery" | "map">("gallery");
+  const [lightbox, setLightbox] = useState<Photo | null>(null);
 
   const uni = profile.university;
   const photos = profile[tab];
@@ -100,7 +128,7 @@ export function ProfileView({ profile }: { profile: Profile }) {
         <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
           {Object.entries(profile.stats).map(([key, value]) => (
             <div key={key} className="rounded-xl bg-[var(--surface-2)] px-3 py-2">
-              <dt className="text-xs text-[var(--muted)]">{key}</dt>
+              <dt className="text-xs text-[var(--muted)]">{STAT_LABELS[key] ?? key}</dt>
               <dd className="font-mono text-lg">{value}</dd>
             </div>
           ))}
@@ -119,6 +147,30 @@ export function ProfileView({ profile }: { profile: Profile }) {
         )}
       </header>
 
+      {/* Галерея или карта */}
+      <div className="flex flex-wrap gap-2">
+        {(["gallery", "map"] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={`rounded-xl border px-3 py-2 text-sm ${
+              view === v
+                ? "border-[var(--accent)] bg-[var(--surface-2)]"
+                : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
+            }`}
+          >
+            {v === "gallery" ? "Галерея" : "Карта"}
+          </button>
+        ))}
+      </div>
+
+      {view === "map" ? (
+        <CampusMap
+          university={uni}
+          photos={[...profile.verified, ...profile.needs_review]}
+        />
+      ) : (
+        <>
       {/* Вкладки */}
       <div className="flex flex-wrap gap-2">
         {(Object.keys(TAB_TITLES) as Tab[]).map((t) => (
@@ -183,10 +235,14 @@ export function ProfileView({ profile }: { profile: Profile }) {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((p) => (
-            <PhotoCard key={`${tab}-${p.id}`} photo={p} />
+            <PhotoCard key={`${tab}-${p.id}`} photo={p} onOpen={setLightbox} />
           ))}
         </div>
       )}
+        </>
+      )}
+
+      {lightbox && <Lightbox photo={lightbox} onClose={() => setLightbox(null)} />}
     </section>
   );
 }

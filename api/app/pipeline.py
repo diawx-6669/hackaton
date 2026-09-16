@@ -14,6 +14,7 @@ from typing import AsyncIterator, Awaitable, Callable, Optional
 from app.config import get_settings
 from app.models import (
     CategoryBucket,
+    RejectReason,
     Photo,
     PhotoCategory,
     Profile,
@@ -39,6 +40,19 @@ GALLERY_CATEGORIES = [
 ]
 
 Collector = tuple[str, Callable[[], Awaitable[list[Photo]]]]
+
+# Человеческие названия причин отказа для строки воронки (п.«Интерфейс» ТЗ).
+REJECT_LABELS: dict[str, str] = {
+    RejectReason.DUPLICATE.value: "дубли",
+    RejectReason.NOT_THIS_UNIVERSITY.value: "не тот вуз",
+    RejectReason.STOCK_DOMAIN.value: "стоки",
+    RejectReason.NOT_A_PHOTO.value: "не фотографии",
+    RejectReason.TOO_FAR.value: "далеко от кампуса",
+    RejectReason.NO_LICENSE.value: "без лицензии",
+    RejectReason.TOO_SMALL.value: "мелкие",
+    RejectReason.JUNK_CLASS.value: "логотипы и схемы",
+    RejectReason.LOW_CONFIDENCE.value: "низкий балл",
+}
 
 
 class Clock:
@@ -332,7 +346,10 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
     yield StageEvent(
         stage=Stage.REJECTED,
         message="Отклонено: " + (
-            ", ".join(f"{k} −{v}" for k, v in sorted(reject_counts.items()))
+            ", ".join(
+                f"{REJECT_LABELS.get(k, k)} −{v}"
+                for k, v in sorted(reject_counts.items(), key=lambda kv: -kv[1])
+            )
             or "ничего"
         ),
         elapsed_ms=clock.elapsed_ms,

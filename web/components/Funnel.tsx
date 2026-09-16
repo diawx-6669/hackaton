@@ -8,6 +8,7 @@ const STAGE_TITLES: Record<string, string> = {
   resolved: "Вуз определён",
   found: "Найдено",
   deduped: "Дубли удалены",
+  classified: "Категории",
   rejected: "Отклонено",
   verified: "Проверено",
   done: "Готово",

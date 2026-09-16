@@ -1,4 +1,4 @@
-import type { ResolveResponse, StageEvent } from "./types";
+import type { Comparison, ResolveResponse, StageEvent } from "./types";
 
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:8000";
@@ -42,7 +42,10 @@ export async function streamProfile(
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+    // Спека SSE разрешает и \n, и \r\n; sse-starlette шлёт именно \r\n.
+    // Нормализуем переводы строк, иначе разделитель событий не находится
+    // и поток «приходит», но UI не обновляется никогда.
+    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
 
     // События разделены пустой строкой; поле data: может быть многострочным.
     let sep: number;
@@ -62,4 +65,18 @@ export async function streamProfile(
       }
     }
   }
+}
+
+export async function compareUniversities(
+  a: string,
+  b: string,
+  signal?: AbortSignal,
+): Promise<Comparison> {
+  const params = new URLSearchParams({ a, b });
+  const res = await fetch(`${API_BASE}/api/compare?${params}`, { signal });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(detail?.detail ?? `Сравнение не удалось (${res.status})`);
+  }
+  return res.json();
 }
