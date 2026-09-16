@@ -21,11 +21,32 @@ from typing import Any, Optional
 
 from app.config import get_settings
 from app.models import Photo, University
+from app.services.http import get_client
 
 log = logging.getLogger(__name__)
 
 MAX_FACTS = 60
 MAX_TOKENS = 2000
+
+# Gemini принимает подмножество OpenAPI с типами в ВЕРХНЕМ регистре,
+# Anthropic — обычный JSON Schema. Держим обе формы явно, чтобы не
+# конвертировать вслепую.
+GEMINI_SCHEMA: dict[str, Any] = {
+    "type": "OBJECT",
+    "properties": {
+        "summary": {"type": "STRING"},
+        "claims": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {"claim": {"type": "STRING"}, "source_id": {"type": "STRING"}},
+                "required": ["claim", "source_id"],
+            },
+        },
+        "insufficient_data": {"type": "BOOLEAN"},
+    },
+    "required": ["summary", "claims", "insufficient_data"],
+}
 
 RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -143,19 +164,72 @@ def _validate(raw: dict[str, Any], facts: list[dict[str, str]]) -> Description:
     )
 
 
+async def _call_anthropic(prompt: str) -> Optional[dict[str, Any]]:
+    settings = get_settings()
+    import anthropic
+
+    client = anthropic.AsyncAnthropic()
+    response = await client.beta.messages.create(
+        model=settings.llm_model,
+        max_tokens=MAX_TOKENS,
+        system=SYSTEM,
+        messages=[{"role": "user", "content": prompt}],
+        output_config={"format": {"type": "json_schema", "schema": RESPONSE_SCHEMA}},
+        betas=["server-side-fallback-2026-07-01"],
+        fallbacks="default",
+    )
+    if getattr(response, "stop_reason", None) == "refusal":
+        log.info("модель отказалась описывать кампус")
+        return None
+
+    text = next(b.text for b in response.content if b.type == "text")
+    return json.loads(text)
+
+
+async def _call_gemini(prompt: str, key: str) -> Optional[dict[str, Any]]:
+    """Обычный HTTP: отдельный SDK ради одного вызова в образ не тащим."""
+    settings = get_settings()
+    client = await get_client()
+    url = f"{settings.gemini_endpoint}/models/{settings.gemini_model}:generateContent"
+
+    response = await client.post(
+        url,
+        params={"key": key},
+        json={
+            "systemInstruction": {"parts": [{"text": SYSTEM}]},
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "responseSchema": GEMINI_SCHEMA,
+                "maxOutputTokens": MAX_TOKENS,
+            },
+        },
+        timeout=20.0,
+    )
+    response.raise_for_status()
+    data = response.json()
+
+    candidates = data.get("candidates") or []
+    if not candidates:
+        log.info("Gemini не вернула кандидатов: %s", str(data)[:200])
+        return None
+    parts = candidates[0].get("content", {}).get("parts") or []
+    text = next((p["text"] for p in parts if "text" in p), None)
+    return json.loads(text) if text else None
+
+
 async def describe(uni: University, photos: list[Photo]) -> Optional[Description]:
     """Возвращает описание или None, если LLM не подключена/не ответила."""
     settings = get_settings()
-    if not settings.llm_enabled:
+    active = settings.active_llm
+    if active is None:
         return None
+    provider, key = active
 
     facts = build_facts(uni, photos)
     if len(facts) < 3:
         return None
 
-    import anthropic
-
-    client = anthropic.AsyncAnthropic()
     prompt = (
         "Факты, найденные сервисом. Другого источника у тебя нет:\n\n"
         + "\n".join(f"[{f['id']}] {f['text']}" for f in facts)
@@ -163,30 +237,20 @@ async def describe(uni: University, photos: list[Photo]) -> Optional[Description
     )
 
     try:
-        response = await client.beta.messages.create(
-            model=settings.llm_model,
-            max_tokens=MAX_TOKENS,
-            system=SYSTEM,
-            messages=[{"role": "user", "content": prompt}],
-            output_config={"format": {"type": "json_schema", "schema": RESPONSE_SCHEMA}},
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
+        raw = (
+            await _call_gemini(prompt, key)
+            if provider == "gemini"
+            else await _call_anthropic(prompt)
         )
     except Exception as exc:  # noqa: BLE001 — описание не должно ронять профиль
-        log.warning("LLM-описание не получено: %s", exc)
+        log.warning("LLM-описание не получено (%s): %s", provider, exc)
         return None
 
-    if getattr(response, "stop_reason", None) == "refusal":
-        log.info("LLM отказалась описывать кампус")
-        return None
-
-    try:
-        text = next(b.text for b in response.content if b.type == "text")
-        raw = json.loads(text)
-    except (StopIteration, ValueError, AttributeError) as exc:
-        log.warning("Ответ LLM не разобран: %s", exc)
+    if not isinstance(raw, dict):
         return None
 
     result = _validate(raw, facts)
-    result.model = settings.llm_model
+    result.model = (
+        settings.gemini_model if provider == "gemini" else settings.llm_model
+    )
     return result

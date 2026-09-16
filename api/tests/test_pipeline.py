@@ -185,8 +185,10 @@ def test_deployment_warnings_fire_on_default_config(caplog):
     from app.config import Settings
     from app.main import _check_deployment_config
 
+    # _env_file=None — иначе результат теста зависел бы от локального .env
+    # разработчика, и на чужой машине он падал бы без причины.
     with caplog.at_level(logging.WARNING, logger="campuslens"):
-        _check_deployment_config(Settings())
+        _check_deployment_config(Settings(_env_file=None))
     text = " ".join(r.message for r in caplog.records)
     assert "CAMPUSLENS_USER_AGENT" in text
     assert "CORS" in text
@@ -195,6 +197,7 @@ def test_deployment_warnings_fire_on_default_config(caplog):
     with caplog.at_level(logging.WARNING, logger="campuslens"):
         _check_deployment_config(
             Settings(
+                _env_file=None,
                 user_agent="CampusLens/1.0 (mailto:me@example.com)",
                 cors_origins="https://campuslens.vercel.app",
             )

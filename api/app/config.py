@@ -37,7 +37,11 @@ class Settings(BaseSettings):
     subscriptions_path: str = "data/subscriptions.json"
 
     # LLM-описание кампуса (шаг 6 ТЗ). Без ключа просто не включается.
-    llm_model: str = "claude-opus-5"
+    # Провайдер выбирается автоматически по тому, какой ключ задан.
+    llm_provider: str = "auto"          # auto | gemini | anthropic
+    llm_model: str = "claude-opus-5"    # используется провайдером anthropic
+    gemini_model: str = "gemini-3.6-flash"
+    gemini_endpoint: str = "https://generativelanguage.googleapis.com/v1beta"
     smtp_host: str = ""
     smtp_from: str = ""
 
@@ -46,11 +50,30 @@ class Settings(BaseSettings):
     commons_api: str = "https://commons.wikimedia.org/w/api.php"
 
     @property
-    def llm_enabled(self) -> bool:
-        """Описание генерируем, только если ключ реально задан."""
+    def active_llm(self) -> tuple[str, str] | None:
+        """(провайдер, ключ) или None, если ни одного ключа нет.
+
+        Явно заданный CAMPUSLENS_LLM_PROVIDER важнее автоопределения.
+        """
         import os
 
-        return bool(os.environ.get("ANTHROPIC_API_KEY"))
+        google = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+
+        if self.llm_provider == "gemini":
+            return ("gemini", google) if google else None
+        if self.llm_provider == "anthropic":
+            return ("anthropic", anthropic_key) if anthropic_key else None
+
+        if google:
+            return "gemini", google
+        if anthropic_key:
+            return "anthropic", anthropic_key
+        return None
+
+    @property
+    def llm_enabled(self) -> bool:
+        return self.active_llm is not None
 
     @property
     def cors_origin_list(self) -> list[str]:

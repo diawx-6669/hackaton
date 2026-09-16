@@ -84,8 +84,9 @@ def test_valid_claims_carry_source_url():
     assert result.sources and result.sources[0]["id"] == "wd-inception"
 
 
-async def test_without_api_key_description_is_skipped(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+async def test_without_any_api_key_description_is_skipped(monkeypatch):
+    for var in ("ANTHROPIC_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
     from app.config import get_settings
 
     get_settings.cache_clear()
@@ -173,3 +174,100 @@ async def test_broken_llm_response_returns_none(fake_llm, monkeypatch):
     monkeypatch.setattr(anthropic, "AsyncAnthropic", FailingClient)
     # Упавшая LLM не должна ронять сборку профиля.
     assert await describe.describe(uni(), [photo("a.jpg", "Корпус")]) is None
+
+
+# --- провайдер Gemini ---
+
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
+
+
+def gemini_response(payload: dict) -> dict:
+    """Ответ Gemini: структурированный JSON лежит текстом внутри parts."""
+    return {
+        "candidates": [
+            {"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}
+        ]
+    }
+
+
+@pytest.fixture
+def gemini_env(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+async def test_gemini_is_picked_when_google_key_is_set(gemini_env, api_mock):
+    import httpx
+
+    route = api_mock.post(GEMINI_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json=gemini_response({
+                "summary": "Вуз основан в 1998 году.",
+                "claims": [{"claim": "Вуз основан в 1998 году", "source_id": "wd-inception"}],
+                "insufficient_data": False,
+            }),
+        )
+    )
+
+    result = await describe.describe(uni(), [photo("a.jpg", "Главный корпус")])
+    assert result is not None
+    assert result.model == "gemini-3.6-flash"
+    assert result.claims[0]["source_id"] == "wd-inception"
+
+    # Ключ уходит параметром запроса, а не в теле.
+    assert route.calls.last.request.url.params["key"] == "test-key"
+    body = json.loads(route.calls.last.request.content)
+    assert body["generationConfig"]["responseMimeType"] == "application/json"
+    assert "[wd-inception]" in body["contents"][0]["parts"][0]["text"]
+
+
+async def test_gemini_hallucination_is_dropped_too(gemini_env, api_mock):
+    import httpx
+
+    api_mock.post(GEMINI_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json=gemini_response({
+                "summary": "Кампус в Алматы. Здесь 15 корпусов.",
+                "claims": [
+                    {"claim": "Кампус в Алматы", "source_id": "wd-city"},
+                    {"claim": "Здесь 15 корпусов", "source_id": "wd-buildings"},
+                ],
+                "insufficient_data": False,
+            }),
+        )
+    )
+    result = await describe.describe(uni(), [photo("a.jpg", "Корпус")])
+    assert [c["claim"] for c in result.claims] == ["Кампус в Алматы"]
+    assert result.unverified_claims == ["Здесь 15 корпусов"]
+
+
+async def test_gemini_error_does_not_break_profile(gemini_env, api_mock):
+    import httpx
+
+    api_mock.post(GEMINI_URL).mock(return_value=httpx.Response(429, json={"error": "rate limit"}))
+    assert await describe.describe(uni(), [photo("a.jpg", "Корпус")]) is None
+
+
+async def test_gemini_empty_candidates_returns_none(gemini_env, api_mock):
+    import httpx
+
+    api_mock.post(GEMINI_URL).mock(return_value=httpx.Response(200, json={"candidates": []}))
+    assert await describe.describe(uni(), [photo("a.jpg", "Корпус")]) is None
+
+
+async def test_explicit_provider_wins_over_autodetect(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "g")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "a")
+    monkeypatch.setenv("CAMPUSLENS_LLM_PROVIDER", "anthropic")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    assert get_settings().active_llm == ("anthropic", "a")
+    get_settings.cache_clear()
