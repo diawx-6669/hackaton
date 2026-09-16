@@ -274,6 +274,11 @@ def score_photo(
     total_weight = sum(s.weight for s in signals) or 1.0
     score = sum(s.value * s.weight for s in signals) / total_weight
 
+    if not photo.license and SourceKind.OFFICIAL_SITE in photo.source_kinds:
+        ev.notes.append(
+            "Снимок с официального сайта вуза: лицензия не указана, права принадлежат вузу"
+        )
+
     ev.signals = signals
     photo.evidence = ev
     photo.confidence = round(score, 3)

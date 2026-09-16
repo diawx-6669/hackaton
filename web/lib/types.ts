@@ -152,6 +152,7 @@ export const REJECT_LABELS: Record<string, string> = {
 export const SOURCE_LABELS: Record<string, string> = {
   commons_category: "Категория Commons",
   commons_geosearch: "Геопоиск Commons",
+  commons_search: "Поиск по названию",
   official_site: "Сайт вуза",
   web_search: "Веб-поиск",
 };

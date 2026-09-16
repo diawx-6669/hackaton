@@ -22,7 +22,7 @@ from app.models import (
     StageEvent,
     University,
 )
-from app.services import commons, dedup, evidence, wikidata
+from app.services import commons, dedup, evidence, officialsite, wikidata
 from app.services.classify import classify
 
 log = logging.getLogger(__name__)
@@ -135,7 +135,17 @@ def _build_collectors(uni: University) -> list[Collector]:
 
         collectors.append((f"Commons: поиск «{term}»", by_search))
 
-    # Шаг 8 ТЗ: сюда же подключаются Brave/SerpAPI и парсер сайта вуза.
+    if uni.website:
+        site = uni.website
+        name = uni.name
+
+        async def by_site() -> list[Photo]:
+            return await officialsite.collect(site, name)
+
+        host = site.split("//")[-1].split("/")[0]
+        collectors.append((f"Сайт вуза: {host}", by_site))
+
+    # Шаг 8 ТЗ: сюда же подключается поисковый API картинок.
     return collectors
 
 
