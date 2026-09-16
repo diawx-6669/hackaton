@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Search } from "./Icons";
 
 type Props = {
   onSearch: (query: string) => void;
@@ -21,20 +22,24 @@ export function SearchBar({ onSearch, busy, onCancel }: Props) {
           const q = value.trim();
           if (q.length >= 2) onSearch(q);
         }}
-        className="flex flex-col gap-3 sm:flex-row"
+        // Поле и кнопка — один визуальный блок с общей рамкой и подсветкой фокуса.
+        className="flex flex-col gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 focus-within:border-[var(--accent)] sm:flex-row sm:items-center"
       >
+        <span className="pointer-events-none hidden pl-2 text-[var(--muted)] sm:block">
+          <Search />
+        </span>
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder="Название университета, например «КБТУ»"
           aria-label="Название университета"
-          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-base outline-none placeholder:text-[var(--muted)] focus:border-[var(--accent)]"
+          className="w-full bg-transparent px-3 py-2.5 text-base outline-none placeholder:text-[var(--muted)]"
         />
         {busy ? (
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-6 py-3 font-medium text-[var(--muted)] hover:text-[var(--foreground)]"
+            className="shrink-0 whitespace-nowrap rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-5 py-2.5 font-medium text-[var(--muted)] transition hover:text-[var(--foreground)]"
           >
             Отменить
           </button>
@@ -42,7 +47,7 @@ export function SearchBar({ onSearch, busy, onCancel }: Props) {
           <button
             type="submit"
             disabled={value.trim().length < 2}
-            className="rounded-xl bg-[var(--accent)] px-6 py-3 font-semibold text-[#08111f] disabled:opacity-40"
+            className="shrink-0 whitespace-nowrap rounded-xl bg-[var(--accent)] px-5 py-2.5 font-semibold text-[#06121d] transition hover:brightness-110 disabled:opacity-40 disabled:hover:brightness-100"
           >
             Собрать профиль
           </button>
@@ -60,7 +65,7 @@ export function SearchBar({ onSearch, busy, onCancel }: Props) {
               setValue(e);
               onSearch(e);
             }}
-            className="rounded-lg border border-[var(--border)] px-2 py-1 hover:border-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-40"
+            className="rounded-lg border border-[var(--border)] px-2.5 py-1 transition hover:border-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-40"
           >
             {e}
           </button>
