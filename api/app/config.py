@@ -35,12 +35,22 @@ class Settings(BaseSettings):
 
     # Заявки «не нашли свой вуз». Письма уходят, только если задан SMTP.
     subscriptions_path: str = "data/subscriptions.json"
+
+    # LLM-описание кампуса (шаг 6 ТЗ). Без ключа просто не включается.
+    llm_model: str = "claude-opus-5"
     smtp_host: str = ""
     smtp_from: str = ""
 
     wikidata_api: str = "https://www.wikidata.org/w/api.php"
     wikidata_sparql: str = "https://query.wikidata.org/sparql"
     commons_api: str = "https://commons.wikimedia.org/w/api.php"
+
+    @property
+    def llm_enabled(self) -> bool:
+        """Описание генерируем, только если ключ реально задан."""
+        import os
+
+        return bool(os.environ.get("ANTHROPIC_API_KEY"))
 
     @property
     def cors_origin_list(self) -> list[str]:

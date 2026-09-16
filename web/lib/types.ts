@@ -94,6 +94,21 @@ export type CategoryBucket = {
   empty_reason?: string | null;
 };
 
+export type DescriptionClaim = {
+  claim: string;
+  source_id: string;
+  url: string;
+};
+
+export type CampusDescription = {
+  summary: string;
+  claims: DescriptionClaim[];
+  sources: { id: string; text: string; url: string }[];
+  insufficient_data: boolean;
+  unverified_claims: string[];
+  model: string;
+};
+
 export type Profile = {
   university: University;
   verified: Photo[];
@@ -101,12 +116,14 @@ export type Profile = {
   rejected: Photo[];
   by_category: CategoryBucket[];
   stats: Record<string, number>;
+  description?: CampusDescription | null;
   warnings: string[];
   took_ms: number;
 };
 
 export type Stage =
   | "classified"
+  | "described"
   | "resolved"
   | "collecting"
   | "found"

@@ -13,6 +13,7 @@ from typing import AsyncIterator, Awaitable, Callable, Optional
 
 from app.config import get_settings
 from app.models import (
+    CampusDescription,
     CategoryBucket,
     RejectReason,
     Photo,
@@ -22,7 +23,7 @@ from app.models import (
     StageEvent,
     University,
 )
-from app.services import commons, dedup, evidence, officialsite, wikidata
+from app.services import commons, dedup, describe, evidence, officialsite, wikidata
 from app.services.classify import classify
 
 log = logging.getLogger(__name__)
@@ -402,12 +403,45 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
     if not verified and not needs_review:
         warnings.append("Ни одного подтверждённого фото собрать не удалось — смотрите вкладку «Отклонено»")
 
+    # --- описание кампуса (шаг 6 ТЗ) ---
+    description: CampusDescription | None = None
+    if verified or needs_review:
+        try:
+            result = await asyncio.wait_for(
+                describe.describe(uni, verified or needs_review),
+                timeout=max(1.0, clock.remaining(settings.total_timeout)),
+            )
+        except asyncio.TimeoutError:
+            result = None
+            warnings.append("Описание кампуса не уложилось в бюджет времени")
+
+        if result is not None:
+            description = CampusDescription(
+                summary=result.summary,
+                claims=[dict(c) for c in result.claims],  # type: ignore[arg-type]
+                sources=result.sources,
+                insufficient_data=result.insufficient_data,
+                unverified_claims=result.unverified_claims,
+                model=result.model,
+            )
+            if result.unverified_claims:
+                warnings.append(
+                    f"В описании отброшено утверждений без источника: {len(result.unverified_claims)}"
+                )
+            yield StageEvent(
+                stage=Stage.DESCRIBED,
+                message="Описание кампуса собрано по найденным источникам",
+                elapsed_ms=clock.elapsed_ms,
+                counts={"claims": len(description.claims)},
+            )
+
     profile = Profile(
         university=uni,
         verified=verified,
         needs_review=needs_review,
         rejected=rejected,
         by_category=_make_buckets(verified, classification_ready=True),
+        description=description,
         stats={
             "found": len(collected),
             "unique": len(unique),

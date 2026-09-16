@@ -151,6 +151,7 @@ class Stage(str, Enum):
     CLASSIFIED = "classified"
     REJECTED = "rejected"
     VERIFIED = "verified"
+    DESCRIBED = "described"
     DONE = "done"
     ERROR = "error"
 
@@ -172,6 +173,25 @@ class CategoryBucket(BaseModel):
     empty_reason: Optional[str] = None
 
 
+class DescriptionClaim(BaseModel):
+    claim: str
+    source_id: str
+    url: str
+
+
+class CampusDescription(BaseModel):
+    """Описание кампуса, написанное LLM строго по найденным источникам."""
+
+    summary: str
+    claims: list[DescriptionClaim] = Field(default_factory=list)
+    sources: list[dict[str, str]] = Field(default_factory=list)
+    insufficient_data: bool = False
+    # Утверждения, сославшиеся на несуществующий источник, — мы их не показываем,
+    # но честно сообщаем, что они были.
+    unverified_claims: list[str] = Field(default_factory=list)
+    model: str = ""
+
+
 class Profile(BaseModel):
     university: University
     verified: list[Photo]
@@ -181,6 +201,7 @@ class Profile(BaseModel):
     rejected: list[Photo] = Field(default_factory=list)
     by_category: list[CategoryBucket] = Field(default_factory=list)
     stats: dict[str, int] = Field(default_factory=dict)
+    description: Optional[CampusDescription] = None
     warnings: list[str] = Field(default_factory=list)
     took_ms: int = 0
 

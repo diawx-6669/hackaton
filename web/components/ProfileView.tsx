@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
+import { CampusSummary } from "./CampusSummary";
 import { Lightbox } from "./Lightbox";
 import { PhotoCard } from "./PhotoCard";
 import {
@@ -154,6 +155,8 @@ export function ProfileView({ profile }: { profile: Profile }) {
           </ul>
         )}
       </header>
+
+      {profile.description && <CampusSummary description={profile.description} />}
 
       {/* Галерея или карта */}
       <div className="flex flex-wrap gap-2">
