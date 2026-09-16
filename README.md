@@ -203,6 +203,8 @@ curl "http://localhost:8000/api/profile.json?id=Q1798175" | jq '.stats' # тот
 
 ## Деплой
 
+Пошаговая инструкция со скриншот-путём и разбором типовых ошибок — в [DEPLOY.md](DEPLOY.md).
+
 - **Фронтенд — Vercel.** Импортировать репозиторий, root directory: `web`.
   Переменная окружения: `NEXT_PUBLIC_API_BASE_URL` = адрес развёрнутого API.
 - **Бэкенд — Render или Railway.** В корне лежит `render.yaml`, бэкенд собирается

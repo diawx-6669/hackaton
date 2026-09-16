@@ -21,8 +21,27 @@ logging.basicConfig(
 )
 
 
+log = logging.getLogger("campuslens")
+
+
+def _check_deployment_config(settings) -> None:
+    """Две ошибки, которые на проде молча ломают сервис. Пусть кричат в логе."""
+    if "set CAMPUSLENS_USER_AGENT" in settings.user_agent:
+        log.warning(
+            "CAMPUSLENS_USER_AGENT не задан. Wikimedia режет анонимные запросы (429) — "
+            "укажите контактный User-Agent в переменных окружения."
+        )
+    if all("localhost" in o or "127.0.0.1" in o for o in settings.cors_origin_list):
+        log.warning(
+            "CAMPUSLENS_CORS_ORIGINS содержит только локальные адреса (%s). "
+            "Развёрнутый фронтенд получит ошибку CORS — добавьте его домен.",
+            settings.cors_origins,
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _check_deployment_config(get_settings())
     yield
     await close_client()
 

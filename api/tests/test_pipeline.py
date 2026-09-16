@@ -176,3 +176,27 @@ async def test_duplicates_carry_evidence_too(full_mock):
     for photo in dups:
         assert photo["evidence"]["signals"], "у дубликата тоже должен быть разбор улик"
         assert photo["reject_reason"] == "duplicate", "причина отказа не должна перезаписаться"
+
+
+def test_deployment_warnings_fire_on_default_config(caplog):
+    """Незаданные User-Agent и CORS молча ломают прод — они обязаны кричать в логе."""
+    import logging
+
+    from app.config import Settings
+    from app.main import _check_deployment_config
+
+    with caplog.at_level(logging.WARNING, logger="campuslens"):
+        _check_deployment_config(Settings())
+    text = " ".join(r.message for r in caplog.records)
+    assert "CAMPUSLENS_USER_AGENT" in text
+    assert "CORS" in text
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="campuslens"):
+        _check_deployment_config(
+            Settings(
+                user_agent="CampusLens/1.0 (mailto:me@example.com)",
+                cors_origins="https://campuslens.vercel.app",
+            )
+        )
+    assert not caplog.records, "правильная конфигурация не должна ничего предупреждать"
