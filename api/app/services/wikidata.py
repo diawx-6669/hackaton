@@ -249,6 +249,7 @@ async def _resolve_uncached(query: str, limit: int = 8) -> list[University]:
     details = await fetch_details([h["id"] for h in shortlist])
 
     universities: list[University] = []
+    rejected_by_type: list[University] = []
     for hit in shortlist:
         qid = hit["id"]
         det = details.get(qid, {})
@@ -257,19 +258,14 @@ async def _resolve_uncached(query: str, limit: int = 8) -> list[University]:
         aliases = _merge_aliases(name, hit.get("aliases", []), det)
 
         is_edu = det.get("is_edu")
-        if is_edu is False:
-            continue
-        if is_edu is None and not _looks_like_institution(name, description):
-            # SPARQL не подтвердил тип и текст не похож на вуз — пропускаем.
-            continue
+        looks_like = _looks_like_institution(name, description)
 
         coords = _parse_point(det.get("coord")) or _parse_point(det.get("city_coord"))
         website = det.get("website")
         if website and not urlparse(website).scheme:
             website = f"https://{website}"
 
-        universities.append(
-            University(
+        candidate = University(
                 id=qid,
                 name=name,
                 description=description,
@@ -283,13 +279,27 @@ async def _resolve_uncached(query: str, limit: int = 8) -> list[University]:
                 inception=(det.get("inception") or "")[:10] or None,
                 wikidata_url=f"https://www.wikidata.org/wiki/{qid}",
                 match_score=similarity(query, name, *aliases),
-            )
         )
+
+        if is_edu is False:
+            # Wikidata уверенно говорит, что это не учебное заведение.
+            continue
+        if is_edu is None and not looks_like:
+            # Тип не подтверждён и текст не похож на вуз — в запас, на случай,
+            # если строгий фильтр не оставит вообще ничего.
+            rejected_by_type.append(candidate)
+            continue
+        universities.append(candidate)
 
     # Финальная сортировка: похожесть важнее, но полнота данных решает ничьи.
     def rank(u: University) -> tuple[float, int, int]:
         completeness = int(u.coordinates is not None) + int(bool(u.commons_category))
         return (u.match_score, completeness, int(bool(u.website)))
+
+    # Лучше показать сомнительных кандидатов, чем сказать «ничего не найдено»:
+    # у малоизвестных вузов тип в Wikidata часто просто не проставлен.
+    if not universities and rejected_by_type:
+        universities = rejected_by_type
 
     universities.sort(key=rank, reverse=True)
     return universities[:limit]

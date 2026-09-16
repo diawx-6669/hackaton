@@ -123,6 +123,18 @@ def _build_collectors(uni: University) -> list[Collector]:
         radius = get_settings().geosearch_radius
         collectors.append((f"Commons: геопоиск в радиусе {radius} м", by_geo))
 
+    # Поиск по названию работает даже у вузов без категории и без координат —
+    # без него профиль малоизвестного вуза оставался бы пустым.
+    search_terms = [uni.name, *[a for a in uni.aliases if len(a) > 4]][:2]
+    for term in search_terms:
+
+        def by_search(query: str = term) -> Awaitable[list[Photo]]:
+            return commons.collect(
+                commons_category=None, coordinates=None, search_query=query
+            )
+
+        collectors.append((f"Commons: поиск «{term}»", by_search))
+
     # Шаг 8 ТЗ: сюда же подключаются Brave/SerpAPI и парсер сайта вуза.
     return collectors
 

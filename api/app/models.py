@@ -4,7 +4,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class Coordinates(BaseModel):
@@ -45,6 +45,7 @@ class ResolveResponse(BaseModel):
 class SourceKind(str, Enum):
     COMMONS_CATEGORY = "commons_category"
     COMMONS_GEOSEARCH = "commons_geosearch"
+    COMMONS_SEARCH = "commons_search"
     OFFICIAL_SITE = "official_site"
     WEB_SEARCH = "web_search"
 
@@ -199,6 +200,22 @@ class Comparison(BaseModel):
     b: Profile
     rows: list[ComparisonRow] = Field(default_factory=list)
     took_ms: int = 0
+
+
+class SubscribeRequest(BaseModel):
+    """Заявка «не нашли свой вуз — сообщите, когда соберём»."""
+
+    email: EmailStr
+    university: str = Field(..., min_length=2, max_length=200)
+    comment: Optional[str] = Field(default=None, max_length=500)
+
+
+class SubscribeResponse(BaseModel):
+    ok: bool
+    message: str
+    # Честно говорим, уйдёт ли письмо на самом деле.
+    delivery: Literal["queued", "stored_only"]
+    queue_size: int
 
 
 class HealthResponse(BaseModel):

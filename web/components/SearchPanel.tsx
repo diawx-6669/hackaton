@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Search } from "./Icons";
+import { SubscribeForm } from "./SubscribeForm";
 
 type Props = {
   onSearch: (query: string) => void;
@@ -11,7 +12,16 @@ type Props = {
   compact?: boolean;
 };
 
-const EXAMPLES = ["КБТУ", "Nazarbayev University", "КазНУ", "МГУ"];
+// Примеры специально разного калибра: крупные, региональные и зарубежные —
+// чтобы было видно, что сервис не ограничен списком известных вузов.
+const EXAMPLES = [
+  "КБТУ",
+  "Nazarbayev University",
+  "КазНУ",
+  "Актюбинский региональный университет",
+  "Toraighyrov University",
+  "МГУ",
+];
 
 // Только проверяемые факты: никаких «89% достоверности» и прочих
 // придуманных метрик — по ТЗ подделывать показатели нельзя.
@@ -23,7 +33,7 @@ const FACTS = [
 ];
 
 export function SearchPanel({ onSearch, busy, onCancel, compact = false }: Props) {
-  const [tab, setTab] = useState<"search" | "about">("search");
+  const [tab, setTab] = useState<"search" | "about" | "notfound">("search");
   const [value, setValue] = useState("");
 
   const form = (
@@ -115,7 +125,7 @@ export function SearchPanel({ onSearch, busy, onCancel, compact = false }: Props
 
   return (
     <section className="glass-panel w-full rounded-2xl p-5 sm:p-7" aria-label="Поиск университета">
-      <div className="tab-shell grid grid-cols-2 rounded-full p-1">
+      <div className="tab-shell grid grid-cols-3 rounded-full p-1">
         <button
           type="button"
           onClick={() => setTab("search")}
@@ -130,10 +140,21 @@ export function SearchPanel({ onSearch, busy, onCancel, compact = false }: Props
         >
           О проекте
         </button>
+        <button
+          type="button"
+          onClick={() => setTab("notfound")}
+          className={`tab-button rounded-full ${tab === "notfound" ? "tab-active" : ""}`}
+        >
+          Нет вуза?
+        </button>
       </div>
 
       {tab === "search" ? (
         <div className="mt-6">{form}</div>
+      ) : tab === "notfound" ? (
+        <div className="mt-6 min-h-[308px]">
+          <SubscribeForm />
+        </div>
       ) : (
         <div className="mt-6 min-h-[308px]">
           <h2 className="font-display text-2xl font-semibold">CampusLens</h2>

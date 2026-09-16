@@ -60,3 +60,52 @@ async def test_aliases_and_english_label_are_collected(wikidata_mock):
     assert "KBTU" in top.aliases
     assert "КБТУ" in top.aliases
     assert top.name not in top.aliases, "название не должно дублироваться в алиасах"
+
+
+async def test_untyped_university_is_shown_rather_than_hidden(api_mock):
+    """У малоизвестных вузов тип в Wikidata часто не проставлен.
+
+    Показать сомнительного кандидата честнее, чем сказать «ничего не найдено».
+    """
+    api_mock.get(WIKIDATA_API).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "search": [
+                    {"id": "Q777", "label": "Aktobe Regional University", "description": None}
+                ]
+            },
+        )
+    )
+    # SPARQL не вернул ни типа, ни описания.
+    api_mock.get(WIKIDATA_SPARQL).mock(
+        return_value=httpx.Response(200, json={"results": {"bindings": []}})
+    )
+    results = await wikidata.resolve("Aktobe Regional University")
+    assert [u.id for u in results] == ["Q777"]
+
+
+async def test_non_education_item_is_still_filtered_out(api_mock):
+    """А вот явное «не учебное заведение» показывать нельзя."""
+    api_mock.get(WIKIDATA_API).mock(
+        return_value=httpx.Response(
+            200, json={"search": [{"id": "Q888", "label": "Almaty", "description": "city"}]}
+        )
+    )
+    api_mock.get(WIKIDATA_SPARQL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": {
+                    "bindings": [
+                        {
+                            "item": {"value": "http://www.wikidata.org/entity/Q888"},
+                            "itemLabel": {"value": "Almaty"},
+                            "isEdu": {"value": "false"},
+                        }
+                    ]
+                }
+            },
+        )
+    )
+    assert await wikidata.resolve("Almaty") == []

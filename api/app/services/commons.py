@@ -119,6 +119,31 @@ async def geosearch_files(
     return [g["title"] for g in data.get("query", {}).get("geosearch", []) or [] if g.get("title")]
 
 
+async def search_files(query: str, limit: int | None = None) -> list[str]:
+    """Полнотекстовый поиск файлов по названию вуза.
+
+    Нужен для малоизвестных вузов: у них в Wikidata часто нет ни категории
+    Commons (P373), ни координат (P625), и два других сборщика молчат.
+    Поиск по названию — единственный способ вообще что-то найти.
+    """
+    s = get_settings()
+    limit = s.max_files_per_source if limit is None else limit
+    query = query.strip()
+    if len(query) < 3:
+        return []
+
+    data = await _api(
+        {
+            "list": "search",
+            "srsearch": query,
+            "srnamespace": 6,
+            "srlimit": min(limit, 100),
+            "srqiprofile": "popular_inclinks_pv",
+        }
+    )
+    return [r["title"] for r in data.get("query", {}).get("search", []) or [] if r.get("title")]
+
+
 async def image_info(titles: list[str]) -> dict[str, dict[str, Any]]:
     """Метаданные файлов: url, автор, лицензия, дата, геотег. Батчами по 50."""
     result: dict[str, dict[str, Any]] = {}
@@ -246,12 +271,16 @@ async def collect(
     commons_category: str | None,
     coordinates: Coordinates | None,
     radius: int | None = None,
+    search_query: str | None = None,
 ) -> list[Photo]:
-    """Оба сборщика Commons параллельно, с кешем по ключу источника."""
+    """Сборщики Commons параллельно, с кешем по ключу источника."""
     s = get_settings()
     if not s.cache_enabled:
         return await _collect_uncached(
-            commons_category=commons_category, coordinates=coordinates, radius=radius
+            commons_category=commons_category,
+            coordinates=coordinates,
+            radius=radius,
+            search_query=search_query,
         )
 
     cache = get_cache()
@@ -260,13 +289,17 @@ async def collect(
         commons_category or "-",
         f"{coordinates.lat:.4f},{coordinates.lon:.4f}" if coordinates else "-",
         radius or s.geosearch_radius,
+        search_query or "-",
         s.max_files_per_source,
         s.category_depth,
     )
 
     async def produce() -> list[dict[str, Any]]:
         photos = await _collect_uncached(
-            commons_category=commons_category, coordinates=coordinates, radius=radius
+            commons_category=commons_category,
+            coordinates=coordinates,
+            radius=radius,
+            search_query=search_query,
         )
         return [p.model_dump(mode="json") for p in photos]
 
@@ -279,6 +312,7 @@ async def _collect_uncached(
     commons_category: str | None,
     coordinates: Coordinates | None,
     radius: int | None = None,
+    search_query: str | None = None,
 ) -> list[Photo]:
     tasks: list[asyncio.Task[tuple[SourceKind, list[str]]]] = []
 
@@ -291,10 +325,16 @@ async def _collect_uncached(
             coordinates.lat, coordinates.lon, radius
         )
 
+    async def _search() -> tuple[SourceKind, list[str]]:
+        assert search_query is not None
+        return SourceKind.COMMONS_SEARCH, await search_files(search_query)
+
     if commons_category:
         tasks.append(asyncio.create_task(_cat()))
     if coordinates:
         tasks.append(asyncio.create_task(_geo()))
+    if search_query:
+        tasks.append(asyncio.create_task(_search()))
     if not tasks:
         return []
 

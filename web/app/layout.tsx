@@ -1,18 +1,19 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, JetBrains_Mono, Manrope } from "next/font/google";
+import { Inter, JetBrains_Mono, Unbounded } from "next/font/google";
 import { CosmicScene } from "@/components/CosmicScene";
 import { SiteHeader } from "@/components/SiteHeader";
 import "./globals.css";
 
-// Типографика из макета: Manrope для интерфейса, Cormorant Garamond для
-// крупных заголовков, JetBrains Mono для цифр. Все три с кириллицей.
-const manrope = Manrope({
+// Unbounded — крупные заголовки (геометрия под космическую тему),
+// Inter — интерфейс, JetBrains Mono — цифры, баллы и таймер.
+// Все три с кириллицей.
+const sans = Inter({
   subsets: ["latin", "cyrillic"],
   variable: "--font-sans",
   display: "swap",
 });
 
-const display = Cormorant_Garamond({
+const display = Unbounded({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600"],
   variable: "--font-display",
@@ -41,7 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="ru"
-      className={`${manrope.variable} ${display.variable} ${mono.variable}`}
+      className={`${sans.variable} ${display.variable} ${mono.variable}`}
     >
       <body>
         <CosmicScene />

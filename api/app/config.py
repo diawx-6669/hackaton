@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     cache_ttl_resolve: float = 86400.0   # метаданные вуза меняются редко
     cache_ttl_photos: float = 21600.0    # состав категории Commons — чаще
 
+    # Заявки «не нашли свой вуз». Письма уходят, только если задан SMTP.
+    subscriptions_path: str = "data/subscriptions.json"
+    smtp_host: str = ""
+    smtp_from: str = ""
+
     wikidata_api: str = "https://www.wikidata.org/w/api.php"
     wikidata_sparql: str = "https://query.wikidata.org/sparql"
     commons_api: str = "https://commons.wikimedia.org/w/api.php"

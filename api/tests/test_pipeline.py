@@ -200,3 +200,54 @@ def test_deployment_warnings_fire_on_default_config(caplog):
             )
         )
     assert not caplog.records, "правильная конфигурация не должна ничего предупреждать"
+
+
+async def test_obscure_university_without_category_or_coords_still_gets_photos(api_mock):
+    """Главный кейс покрытия: у малоизвестного вуза нет ни P373, ни P625."""
+    import httpx as _httpx
+
+    api_mock.get(WIKIDATA_API).mock(
+        return_value=_httpx.Response(
+            200,
+            json={
+                "search": [
+                    {
+                        "id": fixtures.OBSCURE_QID,
+                        "label": fixtures.OBSCURE_NAME,
+                        "description": "university in Kazakhstan",
+                    }
+                ]
+            },
+        )
+    )
+    api_mock.get(WIKIDATA_SPARQL).mock(
+        return_value=_httpx.Response(200, json=fixtures.OBSCURE_SPARQL)
+    )
+    api_mock.get(COMMONS_API).mock(side_effect=commons_handler(fixtures.COMMONS_FIXTURES))
+
+    events = await collect_events(qid=fixtures.OBSCURE_QID)
+    profile = events[-1].payload
+
+    assert profile["university"]["commons_category"] is None
+    assert profile["university"]["coordinates"] is None
+    # Раньше здесь был пустой профиль: оба сборщика молчали.
+    assert profile["stats"]["found"] > 0, "поиск по названию обязан что-то найти"
+
+    found = [*profile["verified"], *profile["needs_review"]]
+    assert found, "фото должно пройти оценку, а не отсеяться"
+    assert any("commons_search" in p["source_kinds"] for p in found)
+
+    # Предупреждения о нехватке данных всё равно должны остаться честными.
+    joined = " ".join(profile["warnings"])
+    assert "P373" in joined and "P625" in joined
+
+
+async def test_search_found_photo_is_not_rejected_as_wrong_university(full_mock):
+    events = await collect_events(qid=fixtures.QID)
+    profile = events[-1].payload
+    wrong = [
+        p for p in profile["rejected"]
+        if p["reject_reason"] == "not_this_university"
+        and "commons_search" in p["source_kinds"]
+    ]
+    assert not wrong, "найденное по названию вуза не может быть «не тем вузом»"

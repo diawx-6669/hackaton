@@ -177,17 +177,20 @@ def score_photo(
 
     # 3. Принадлежность к официальной категории вуза в Commons
     in_category = SourceKind.COMMONS_CATEGORY in photo.source_kinds
+    by_name = SourceKind.COMMONS_SEARCH in photo.source_kinds
+    if in_category:
+        link_value, link_detail = 1.0, "файл лежит в категории Commons самого вуза"
+    elif by_name:
+        link_value, link_detail = 0.6, "файл найден поиском по названию вуза"
+    else:
+        link_value, link_detail = 0.35, "файл найден только по геопоиску рядом с кампусом"
     signals.append(
         EvidenceSignal(
             key="category",
             label="Привязка к вузу",
-            value=1.0 if in_category else 0.35,
+            value=link_value,
             weight=0.25,
-            detail=(
-                "файл лежит в категории Commons самого вуза"
-                if in_category
-                else "файл найден только по геопоиску рядом с кампусом"
-            ),
+            detail=link_detail,
         )
     )
 
@@ -278,7 +281,10 @@ def score_photo(
     if photo.reject_reason is None and score < REVIEW_THRESHOLD:
         # Разделяем «слабые улики вообще» и «скорее всего это другой вуз»:
         # жюри должно видеть внятную причину, а не общее «низкий балл».
-        wrong_university = not mentions and SourceKind.COMMONS_CATEGORY not in photo.source_kinds
+        wrong_university = not mentions and not (
+            SourceKind.COMMONS_CATEGORY in photo.source_kinds
+            or SourceKind.COMMONS_SEARCH in photo.source_kinds
+        )
         if wrong_university:
             photo.reject_reason = RejectReason.NOT_THIS_UNIVERSITY
             photo.reject_detail = (

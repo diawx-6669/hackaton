@@ -9,11 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.models import HealthResponse
-from app.routers import compare, profile, resolve
+from app.routers import compare, profile, resolve, subscribe
 from app.services.cache import get_cache
 from app.services.http import close_client
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -59,13 +59,14 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
     allow_credentials=False,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
 app.include_router(resolve.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
 app.include_router(compare.router, prefix="/api")
+app.include_router(subscribe.router, prefix="/api")
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["meta"])

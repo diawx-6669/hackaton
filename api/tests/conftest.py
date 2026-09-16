@@ -45,6 +45,9 @@ def commons_handler(fixtures: dict[str, Any]):
         if params.get("list") == "categorymembers":
             members = fixtures["categories"].get(params["cmtitle"], [])
             return httpx.Response(200, json={"query": {"categorymembers": members}})
+        if params.get("list") == "search":
+            hits = fixtures.get("search", {}).get(params["srsearch"], [])
+            return httpx.Response(200, json={"query": {"search": hits}})
         if params.get("list") == "geosearch":
             return httpx.Response(200, json={"query": {"geosearch": fixtures.get("geosearch", [])}})
         if "imageinfo" in (params.get("prop") or ""):

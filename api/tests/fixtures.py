@@ -126,6 +126,25 @@ PAGES: dict[str, Any] = {
     "File:Almaty far away.jpg": _page("File:Almaty far away.jpg", lat=43.30, lon=77.05),
 }
 
+# Малоизвестный вуз: ни категории Commons, ни координат — только имя.
+OBSCURE_QID = "Q55555"
+OBSCURE_NAME = "Kostanay Regional University"
+
+OBSCURE_SPARQL: dict[str, Any] = {
+    "results": {
+        "bindings": [
+            {
+                "item": {"value": f"http://www.wikidata.org/entity/{OBSCURE_QID}"},
+                "itemLabel": {"value": OBSCURE_NAME},
+                "itemDescription": {"value": "university in Kazakhstan"},
+                "isEdu": {"value": "true"},
+            }
+        ]
+    }
+}
+
+OBSCURE_FILE = "File:Kostanay Regional University main hall.jpg"
+
 COMMONS_FIXTURES: dict[str, Any] = {
     "categories": {
         CATEGORY: [
@@ -143,5 +162,12 @@ COMMONS_FIXTURES: dict[str, Any] = {
         {"title": SHARED, "lat": 43.2361, "lon": 76.9291},
         {"title": "File:Almaty far away.jpg", "lat": 43.30, "lon": 77.05},
     ],
-    "pages": PAGES,
+    "search": {
+        "Kazakh-British Technical University": [{"title": SHARED}],
+        OBSCURE_NAME: [{"title": OBSCURE_FILE}],
+    },
+    "pages": {
+        **PAGES,
+        OBSCURE_FILE: _page(OBSCURE_FILE, description=f"Main hall of the {OBSCURE_NAME}"),
+    },
 }
