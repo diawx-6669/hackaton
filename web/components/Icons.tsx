@@ -91,3 +91,11 @@ export function Clock({ className = base }: Props) {
     </svg>
   );
 }
+
+export function Sparkle({ className = base }: Props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className={className} aria-hidden>
+      <path d="M12 3.5 13.7 9l5.5 1.7-5.5 1.7L12 18l-1.7-5.6L4.8 10.7 10.3 9 12 3.5Z" strokeLinejoin="round" />
+    </svg>
+  );
+}

@@ -1,13 +1,21 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono, Manrope } from "next/font/google";
+import { Cormorant_Garamond, JetBrains_Mono, Manrope } from "next/font/google";
+import { CosmicScene } from "@/components/CosmicScene";
 import { SiteHeader } from "@/components/SiteHeader";
 import "./globals.css";
 
-// Manrope — заголовки и текст, JetBrains Mono — цифры, баллы и таймер.
-// Обе с кириллицей: проект русскоязычный.
+// Типографика из макета: Manrope для интерфейса, Cormorant Garamond для
+// крупных заголовков, JetBrains Mono для цифр. Все три с кириллицей.
 const manrope = Manrope({
   subsets: ["latin", "cyrillic"],
   variable: "--font-sans",
+  display: "swap",
+});
+
+const display = Cormorant_Garamond({
+  subsets: ["latin", "cyrillic"],
+  weight: ["400", "500", "600"],
+  variable: "--font-display",
   display: "swap",
 });
 
@@ -31,8 +39,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru" className={`${manrope.variable} ${mono.variable}`}>
+    <html
+      lang="ru"
+      className={`${manrope.variable} ${display.variable} ${mono.variable}`}
+    >
       <body>
+        <CosmicScene />
         <SiteHeader />
         {children}
       </body>

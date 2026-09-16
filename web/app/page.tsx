@@ -3,16 +3,8 @@
 import { useRouter } from "next/navigation";
 import { CandidatePicker } from "@/components/CandidatePicker";
 import { Funnel } from "@/components/Funnel";
-import {
-  CategoriesStrip,
-  HeroStats,
-  HowItWorks,
-  Pillars,
-  SourcesNote,
-  TrustFormula,
-} from "@/components/Landing";
 import { ProfileView } from "@/components/ProfileView";
-import { SearchBar } from "@/components/SearchBar";
+import { SearchPanel } from "@/components/SearchPanel";
 import { useProfileRun } from "@/lib/useProfile";
 
 export default function Home() {
@@ -20,34 +12,47 @@ export default function Home() {
   const { events, profile, candidates, error, running, startedAt, run, cancel } = useProfileRun();
   const started = events.length > 0 || running;
 
-  return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:gap-10 sm:px-6 sm:py-12">
-      {!started && (
-        <section className="rise flex flex-col gap-4 sm:gap-5 sm:pt-6">
-          <p className="w-fit rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs text-[var(--muted)]">
+  // Пока поиск не запущен — экран входа: заголовок и стеклянная панель.
+  if (!started) {
+    return (
+      <main className="mx-auto grid w-full max-w-[1440px] items-center gap-10 px-5 py-10 sm:px-10 lg:min-h-[calc(100dvh-4.5rem)] lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-20 lg:px-16 lg:py-14">
+        <div className="rise max-w-[640px]">
+          <p className="w-fit rounded-full border border-[var(--border)] bg-[oklch(0.2_0.04_262_/_55%)] px-3 py-1 text-xs text-[var(--muted)] backdrop-blur">
             Хакатон LOCUS 2026 · кейс 1
           </p>
-          <h1 className="max-w-4xl text-[28px] font-extrabold leading-[1.12] sm:text-5xl lg:text-6xl">
-            Университеты показывают рекламу.
+
+          <h1 className="font-display mt-5 text-[clamp(2.6rem,5.2vw,5.2rem)] font-medium leading-[0.98]">
+            Кампус,
             <br />
-            <span className="bg-gradient-to-r from-[var(--accent)] to-[#8b7bff] bg-clip-text text-transparent">
-              CampusLens показывает, как там на самом деле.
-            </span>
+            который виден честно.
           </h1>
-          <p className="max-w-2xl text-sm leading-relaxed text-[var(--muted)] sm:text-lg">
-            Введите название вуза — меньше чем за 30 секунд соберём визуальный профиль кампуса
-            из открытых источников: кампус, общежития, аудитории, библиотеки, лаборатории, спорт,
-            студенческая жизнь и город.
+
+          <p className="mt-5 max-w-md text-sm leading-6 text-[var(--muted)] sm:text-base">
+            Визуальный профиль университета по реальным данным — вместо рекламных обещаний.
+            У каждого снимка есть источник, автор и лицензия.
           </p>
-        </section>
-      )}
 
-      <SearchBar busy={running} onSearch={(q) => run({ q })} onCancel={cancel} />
+          {error && (
+            <p className="mt-6 max-w-md rounded-xl border border-[var(--bad)]/40 bg-[var(--bad)]/10 p-3 text-sm text-[var(--bad)]">
+              {error}
+            </p>
+          )}
+        </div>
 
-      {!started && <HeroStats />}
+        <div className="rise">
+          <SearchPanel busy={running} onSearch={(q) => run({ q })} onCancel={cancel} />
+        </div>
+      </main>
+    );
+  }
+
+  // Поиск пошёл — показываем воронку, выбор вуза и собранный профиль.
+  return (
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-10">
+      <SearchPanel compact busy={running} onSearch={(q) => run({ q })} onCancel={cancel} />
 
       {error && (
-        <p className="rounded-2xl border border-[var(--bad)]/40 bg-[var(--bad)]/5 p-4 text-sm text-[var(--bad)]">
+        <p className="rounded-2xl border border-[var(--bad)]/40 bg-[var(--bad)]/10 p-4 text-sm text-[var(--bad)]">
           {error}
         </p>
       )}
@@ -65,16 +70,6 @@ export default function Home() {
       )}
 
       {profile && <ProfileView profile={profile} />}
-
-      {!started && (
-        <>
-          <Pillars />
-          <HowItWorks />
-          <TrustFormula />
-          <CategoriesStrip />
-          <SourcesNote />
-        </>
-      )}
 
       <footer className="mt-4 border-t border-[var(--border-soft)] pt-4 text-xs text-[var(--muted)]">
         Данные: Wikidata (CC0) и Wikimedia Commons — лицензия каждого файла указана в карточке.

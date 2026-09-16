@@ -1,18 +1,31 @@
 @import "tailwindcss";
 
+/* Визуальная система перенесена из макета: космический фон, стеклянные
+   панели, холодная сине-фиолетовая палитра. Токены сохранены те же, что
+   использовали прежние экраны (--surface, --muted, --ok/--warn/--bad),
+   поэтому профиль, карта и сравнение продолжают работать без правок. */
 :root {
-  --background: #080c18;
-  --surface: #101728;
-  --surface-2: #17203a;
-  --border: #222d4d;
-  --border-soft: #1a2237;
-  --foreground: #e9eefb;
-  --muted: #94a2c4;
-  --accent: #4cc2f5;
-  --accent-deep: #1b7fb0;
-  --ok: #3ddc9a;
-  --warn: #f5b942;
-  --bad: #fa7a7a;
+  --background: oklch(0.105 0.025 264);
+  --foreground: oklch(0.96 0.015 255);
+  --muted: oklch(0.74 0.03 258);
+
+  --surface: oklch(0.22 0.055 258 / 62%);
+  --surface-2: oklch(0.28 0.045 262 / 55%);
+  --panel-deep: oklch(0.15 0.045 266 / 82%);
+
+  --border: oklch(0.74 0.075 226 / 24%);
+  --border-soft: oklch(0.74 0.075 226 / 12%);
+
+  --accent: oklch(0.82 0.12 215);
+  --accent-deep: oklch(0.6 0.15 250);
+  --on-accent: oklch(0.17 0.045 266);
+
+  --ok: oklch(0.82 0.16 165);
+  --warn: oklch(0.85 0.14 85);
+  --bad: oklch(0.72 0.17 20);
+
+  --pointer-x: 50%;
+  --pointer-y: 50%;
 }
 
 @theme inline {
@@ -27,6 +40,7 @@
   --color-warn: var(--warn);
   --color-bad: var(--bad);
   --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
   --font-mono: var(--font-mono);
 }
 
@@ -34,26 +48,33 @@
   box-sizing: border-box;
 }
 
+html {
+  background: var(--background);
+}
+
 body {
-  /* Слоями: холодное свечение сверху-слева, тёплый отблеск справа и
-     еле заметная сетка — чтобы фон не был плоской заливкой. */
-  background-color: var(--background);
-  background-image:
-    radial-gradient(900px 520px at 8% -8%, rgba(76, 194, 245, 0.16), transparent 62%),
-    radial-gradient(760px 460px at 96% 4%, rgba(123, 97, 255, 0.13), transparent 60%),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.022) 1px, transparent 1px),
-    linear-gradient(to right, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
-  background-size: auto, auto, 100% 64px, 64px 100%;
-  background-attachment: fixed, fixed, scroll, scroll;
+  margin: 0;
+  min-width: 320px;
+  /* Прозрачный: базовый цвет задан на html, иначе он закрывал космическую
+     сцену, которая лежит слоем ниже (z-index: -1). */
+  background: transparent;
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
 }
 
-h1, h2, h3 {
-  letter-spacing: -0.022em;
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.font-display {
+  font-family: var(--font-display), Georgia, serif;
 }
 
 .font-mono,
@@ -62,12 +83,82 @@ kbd {
   font-family: var(--font-mono), ui-monospace, monospace;
 }
 
-/* Стеклянная карточка — базовый элемент визуальной системы. */
+/* ---------- космическая сцена ---------- */
+
+.cosmic-scene {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.cosmic-image {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  transform-origin: 60% 44%;
+  animation: cosmic-drift 22s ease-in-out infinite alternate;
+}
+
+.scene-shade {
+  position: absolute;
+  inset: 0;
+  /* Слева плотнее — там текст, справа легче, чтобы туманность читалась. */
+  background: linear-gradient(
+    100deg,
+    oklch(0.07 0.025 270 / 88%) 0%,
+    oklch(0.07 0.025 270 / 62%) 38%,
+    oklch(0.08 0.03 270 / 30%) 70%,
+    oklch(0.07 0.025 270 / 52%) 100%
+  );
+}
+
+.pointer-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(440px circle at var(--pointer-x) var(--pointer-y), oklch(0.75 0.16 211 / 13%), transparent 68%);
+}
+
+.star-field {
+  position: absolute;
+  inset: 0;
+  opacity: 0.7;
+  background-image:
+    radial-gradient(circle at 18% 24%, var(--foreground) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 68% 16%, var(--foreground) 0 0.7px, transparent 1.4px),
+    radial-gradient(circle at 84% 68%, var(--foreground) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 42% 77%, var(--foreground) 0 0.8px, transparent 1.5px);
+  background-size: 190px 170px, 240px 210px, 330px 290px, 270px 230px;
+  animation: stars-float 18s linear infinite;
+}
+
+@keyframes cosmic-drift {
+  from { transform: scale(1.04) translate3d(0, 0, 0); }
+  to { transform: scale(1.12) translate3d(-1.6%, -1.2%, 0); }
+}
+
+@keyframes stars-float {
+  from { background-position: 0 0, 0 0, 0 0, 0 0; }
+  to { background-position: 190px 170px, -240px 210px, 330px -290px, -270px 230px; }
+}
+
+/* ---------- элементы интерфейса ---------- */
+
+.glass-panel {
+  border: 1px solid var(--border);
+  background: linear-gradient(145deg, var(--surface), var(--panel-deep));
+  backdrop-filter: blur(14px);
+  box-shadow: 0 24px 60px oklch(0.05 0.02 260 / 45%);
+}
+
 .card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012));
   border: 1px solid var(--border);
   border-radius: 1rem;
-  backdrop-filter: blur(6px);
+  background: linear-gradient(145deg, var(--surface), var(--panel-deep));
+  backdrop-filter: blur(10px);
 }
 
 .card-hover {
@@ -75,8 +166,64 @@ kbd {
 }
 
 .card-hover:hover {
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 55%, transparent);
   transform: translateY(-2px);
+}
+
+.brand-mark {
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, oklch(0.67 0.19 294 / 74%), oklch(0.59 0.15 220 / 70%));
+  box-shadow: 0 0 30px oklch(0.55 0.2 280 / 28%);
+}
+
+.field {
+  border: 1px solid var(--border);
+  background: oklch(0.7 0.045 255 / 14%);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px oklch(0.78 0.13 218 / 13%);
+}
+
+.primary-action {
+  border: 0;
+  color: var(--on-accent);
+  background: linear-gradient(100deg, oklch(0.9 0.07 292), oklch(0.96 0.025 213));
+  box-shadow: 0 0 24px oklch(0.76 0.12 227 / 22%);
+  transition: transform 0.2s, filter 0.2s, opacity 0.2s;
+}
+
+.primary-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+.primary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.tab-shell {
+  background: oklch(0.1 0.03 268 / 43%);
+  border: 1px solid var(--border-soft);
+}
+
+.tab-button {
+  height: 36px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  border: 0;
+  background: transparent;
+  transition: 0.2s ease;
+}
+
+.tab-active {
+  color: var(--on-accent);
+  background: linear-gradient(100deg, oklch(0.95 0.03 220), oklch(0.88 0.035 285));
+  box-shadow: 0 5px 18px oklch(0.05 0.02 260 / 36%);
 }
 
 @keyframes pulse-dot {
@@ -98,6 +245,6 @@ kbd {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rise, .pulse-dot { animation: none; }
-  .card-hover:hover { transform: none; }
+  .cosmic-image, .star-field, .rise, .pulse-dot { animation: none; }
+  .card-hover:hover, .primary-action:hover:not(:disabled) { transform: none; }
 }

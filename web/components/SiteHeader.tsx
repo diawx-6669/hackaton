@@ -1,11 +1,17 @@
 import Link from "next/link";
+import { Sparkle } from "./Icons";
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[#0b1020e6] backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-[var(--border-soft)] bg-[oklch(0.1_0.03_268_/_55%)] backdrop-blur-md">
       <nav className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:gap-4 sm:px-6">
-        <Link href="/" className="shrink-0 whitespace-nowrap text-sm font-bold sm:text-lg">
-          CampusLens <span className="text-[var(--accent)]">AI</span>
+        <Link href="/" className="flex shrink-0 items-center gap-2.5">
+          <span className="brand-mark grid size-8 place-items-center rounded-xl">
+            <Sparkle className="h-4 w-4" />
+          </span>
+          <span className="font-display whitespace-nowrap text-base font-semibold sm:text-xl">
+            CampusLens
+          </span>
         </Link>
         <div className="flex items-center gap-0.5 text-xs sm:gap-1 sm:text-sm">
           <Link
