@@ -271,3 +271,122 @@ async def test_explicit_provider_wins_over_autodetect(monkeypatch):
     get_settings.cache_clear()
     assert get_settings().active_llm == ("anthropic", "a")
     get_settings.cache_clear()
+
+
+# --- провайдер Groq ---
+#
+# ВАЖНО: живой вызов к api.groq.com из окружения разработки заблокирован,
+# поэтому проверен весь код вокруг запроса, но не сам сетевой вызов.
+# Первый запуск с настоящим ключом нужно проверить руками.
+
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+
+def groq_response(payload: dict) -> dict:
+    return {"choices": [{"message": {"content": json.dumps(payload, ensure_ascii=False)}}]}
+
+
+@pytest.fixture
+def groq_env(monkeypatch):
+    for var in ("ANTHROPIC_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_test")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+async def test_groq_request_shape(groq_env, api_mock):
+    import httpx
+
+    route = api_mock.post(GROQ_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json=groq_response({
+                "summary": "Вуз в Алматы.",
+                "claims": [{"claim": "Вуз в Алматы", "source_id": "wd-city"}],
+                "insufficient_data": False,
+            }),
+        )
+    )
+
+    result = await describe.describe(uni(), [photo("a.jpg", "Корпус")])
+    assert result is not None
+    assert result.model == "llama-3.3-70b-versatile"
+
+    request = route.calls.last.request
+    assert request.headers["authorization"] == "Bearer gsk_test"
+    body = json.loads(request.content)
+    assert body["response_format"] == {"type": "json_object"}
+    # Схему обязаны продиктовать текстом: json_schema поддерживают не все модели.
+    assert "insufficient_data" in body["messages"][0]["content"]
+    assert "[wd-city]" in body["messages"][1]["content"]
+
+
+async def test_groq_hallucination_is_dropped(groq_env, api_mock):
+    import httpx
+
+    api_mock.post(GROQ_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json=groq_response({
+                "summary": "Кампус в Алматы. Здесь 40 лабораторий.",
+                "claims": [
+                    {"claim": "Кампус в Алматы", "source_id": "wd-city"},
+                    {"claim": "Здесь 40 лабораторий", "source_id": "wd-labs"},
+                ],
+                "insufficient_data": False,
+            }),
+        )
+    )
+    result = await describe.describe(uni(), [photo("a.jpg", "Корпус")])
+    assert [c["claim"] for c in result.claims] == ["Кампус в Алматы"]
+    assert result.unverified_claims == ["Здесь 40 лабораторий"]
+
+
+async def test_groq_retired_model_error_does_not_break_profile(groq_env, api_mock):
+    """Groq регулярно выводит модели из обращения — это не должно ронять профиль."""
+    import httpx
+
+    api_mock.post(GROQ_URL).mock(
+        return_value=httpx.Response(
+            404, json={"error": {"message": "The model `llama-x` has been decommissioned"}}
+        )
+    )
+    assert await describe.describe(uni(), [photo("a.jpg", "Корпус")]) is None
+
+
+async def test_groq_model_is_configurable(monkeypatch, groq_env, api_mock):
+    import httpx
+
+    monkeypatch.setenv("CAMPUSLENS_GROQ_MODEL", "openai/gpt-oss-120b")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+
+    route = api_mock.post(GROQ_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json=groq_response({
+                "summary": "Вуз в Алматы.",
+                "claims": [{"claim": "Вуз в Алматы", "source_id": "wd-city"}],
+                "insufficient_data": False,
+            }),
+        )
+    )
+    await describe.describe(uni(), [photo("a.jpg", "Корпус")])
+    assert json.loads(route.calls.last.request.content)["model"] == "openai/gpt-oss-120b"
+    get_settings.cache_clear()
+
+
+async def test_gemini_wins_over_groq_in_auto_mode(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "g")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_x")
+    monkeypatch.delenv("CAMPUSLENS_LLM_PROVIDER", raising=False)
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    assert get_settings().active_llm[0] == "gemini"
+    get_settings.cache_clear()

@@ -38,10 +38,14 @@ class Settings(BaseSettings):
 
     # LLM-описание кампуса (шаг 6 ТЗ). Без ключа просто не включается.
     # Провайдер выбирается автоматически по тому, какой ключ задан.
-    llm_provider: str = "auto"          # auto | gemini | anthropic
+    llm_provider: str = "auto"          # auto | gemini | groq | anthropic
     llm_model: str = "claude-opus-5"    # используется провайдером anthropic
     gemini_model: str = "gemini-3.6-flash"
     gemini_endpoint: str = "https://generativelanguage.googleapis.com/v1beta"
+    # Модель Groq задаётся переменной: список актуальных меняется,
+    # см. console.groq.com/docs/models
+    groq_model: str = "llama-3.3-70b-versatile"
+    groq_endpoint: str = "https://api.groq.com/openai/v1"
     smtp_host: str = ""
     smtp_from: str = ""
 
@@ -57,18 +61,20 @@ class Settings(BaseSettings):
         """
         import os
 
-        google = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-        anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+        keys = {
+            "gemini": os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"),
+            "groq": os.environ.get("GROQ_API_KEY"),
+            "anthropic": os.environ.get("ANTHROPIC_API_KEY"),
+        }
 
-        if self.llm_provider == "gemini":
-            return ("gemini", google) if google else None
-        if self.llm_provider == "anthropic":
-            return ("anthropic", anthropic_key) if anthropic_key else None
+        if self.llm_provider in keys:
+            key = keys[self.llm_provider]
+            return (self.llm_provider, key) if key else None
 
-        if google:
-            return "gemini", google
-        if anthropic_key:
-            return "anthropic", anthropic_key
+        # Автовыбор: первый провайдер, для которого есть ключ.
+        for provider in ("gemini", "groq", "anthropic"):
+            if keys[provider]:
+                return provider, keys[provider]  # type: ignore[return-value]
         return None
 
     @property

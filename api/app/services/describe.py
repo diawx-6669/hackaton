@@ -218,6 +218,47 @@ async def _call_gemini(prompt: str, key: str) -> Optional[dict[str, Any]]:
     return json.loads(text) if text else None
 
 
+async def _call_groq(prompt: str, key: str) -> Optional[dict[str, Any]]:
+    """Groq: OpenAI-совместимый чат. Схему просим текстом плюс json_object —
+    это поддерживают все модели Groq, в отличие от json_schema."""
+    settings = get_settings()
+    client = await get_client()
+
+    schema_hint = (
+        "Ответ верни строго в формате JSON со структурой:\n"
+        '{"summary": "строка", '
+        '"claims": [{"claim": "строка", "source_id": "идентификатор факта"}], '
+        '"insufficient_data": true|false}'
+    )
+
+    response = await client.post(
+        f"{settings.groq_endpoint}/chat/completions",
+        headers={"Authorization": f"Bearer {key}"},
+        json={
+            "model": settings.groq_model,
+            "messages": [
+                {"role": "system", "content": f"{SYSTEM}\n\n{schema_hint}"},
+                {"role": "user", "content": prompt},
+            ],
+            "response_format": {"type": "json_object"},
+            "max_tokens": MAX_TOKENS,
+            "temperature": 0.2,
+        },
+        timeout=20.0,
+    )
+    if response.status_code >= 400:
+        # Модели Groq периодически выводят из обращения — покажем причину как есть.
+        log.warning("Groq ответил %s: %s", response.status_code, response.text[:300])
+        return None
+
+    data = response.json()
+    choices = data.get("choices") or []
+    if not choices:
+        return None
+    content = choices[0].get("message", {}).get("content")
+    return json.loads(content) if content else None
+
+
 async def describe(uni: University, photos: list[Photo]) -> Optional[Description]:
     """Возвращает описание или None, если LLM не подключена/не ответила."""
     settings = get_settings()
@@ -237,11 +278,12 @@ async def describe(uni: University, photos: list[Photo]) -> Optional[Description
     )
 
     try:
-        raw = (
-            await _call_gemini(prompt, key)
-            if provider == "gemini"
-            else await _call_anthropic(prompt)
-        )
+        if provider == "gemini":
+            raw = await _call_gemini(prompt, key)
+        elif provider == "groq":
+            raw = await _call_groq(prompt, key)
+        else:
+            raw = await _call_anthropic(prompt)
     except Exception as exc:  # noqa: BLE001 — описание не должно ронять профиль
         log.warning("LLM-описание не получено (%s): %s", provider, exc)
         return None
@@ -250,7 +292,8 @@ async def describe(uni: University, photos: list[Photo]) -> Optional[Description
         return None
 
     result = _validate(raw, facts)
-    result.model = (
-        settings.gemini_model if provider == "gemini" else settings.llm_model
-    )
+    result.model = {
+        "gemini": settings.gemini_model,
+        "groq": settings.groq_model,
+    }.get(provider, settings.llm_model)
     return result
