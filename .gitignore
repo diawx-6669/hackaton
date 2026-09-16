@@ -1,0 +1,36 @@
+# ---- secrets ----
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ---- python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# ---- node / next ----
+node_modules/
+.next/
+out/
+.turbo/
+npm-debug.log*
+yarn-error.log*
+
+# ---- caches / data ----
+.cache/
+data/cache/
+*.sqlite
+*.sqlite3
+
+# ---- os / editors ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
