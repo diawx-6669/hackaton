@@ -1,13 +1,17 @@
 """Шаг 4 ТЗ: дедупликация.
 
-Сейчас работает точная дедупликация (один и тот же файл, найденный разными
-сборщиками) — она же даёт улику «повтор в нескольких источниках».
-Перцептивный pHash (imagehash) и сравнение CLIP-эмбеддингов подключаются
-в `perceptual_dedupe` — точка расширения намеренно оставлена явной.
+Два уровня. Точная — один и тот же файл Commons, найденный разными
+сборщиками; она же даёт улику «повтор в нескольких источниках».
+Перцептивная — pHash по миниатюрам: ловит ту же сцену, загруженную
+другим человеком или в другом разрешении.
+
+Сравнение CLIP-эмбеддингов (похожие, но не идентичные ракурсы) остаётся
+следующим шагом — оно подключается там же, где считается pHash.
 """
 from __future__ import annotations
 
 from app.models import Photo, RejectReason
+from app.services import phash as phash_service
 
 
 def _key(photo: Photo) -> str:
@@ -41,16 +45,21 @@ def exact_dedupe(photos: list[Photo]) -> tuple[list[Photo], list[Photo]]:
     return list(unique.values()), duplicates
 
 
-def perceptual_dedupe(photos: list[Photo]) -> tuple[list[Photo], list[Photo]]:
-    """Заглушка под pHash/CLIP (шаг 4-5).
+async def perceptual_dedupe(
+    photos: list[Photo], threshold: int | None = None
+) -> tuple[list[Photo], list[Photo]]:
+    """pHash по миниатюрам: одна сцена — одна карточка.
 
-    Пока честно ничего не делает: без скачивания пикселей посчитать pHash
-    нельзя, а выдумывать хеши мы не будем.
+    Картинки, для которых хеш посчитать не удалось (сеть, битый файл),
+    не выбрасываются: отсутствие хеша — не повод считать фото дублем.
     """
-    return photos, []
+    await phash_service.compute_hashes(photos)
+    return phash_service.group_duplicates(
+        photos, threshold if threshold is not None else phash_service.DEFAULT_THRESHOLD
+    )
 
 
-def dedupe(photos: list[Photo]) -> tuple[list[Photo], list[Photo]]:
+async def dedupe(photos: list[Photo]) -> tuple[list[Photo], list[Photo]]:
     unique, dups = exact_dedupe(photos)
-    unique, perceptual_dups = perceptual_dedupe(unique)
+    unique, perceptual_dups = await perceptual_dedupe(unique)
     return unique, dups + perceptual_dups

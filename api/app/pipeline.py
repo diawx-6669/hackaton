@@ -312,7 +312,16 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
     )
 
     # --- дедупликация ---
-    unique, duplicates = dedup.dedupe(collected)
+    try:
+        unique, duplicates = await asyncio.wait_for(
+            dedup.dedupe(collected), timeout=max(2.0, clock.remaining(settings.total_timeout))
+        )
+    except asyncio.TimeoutError:
+        # Перцептивная дедупликация качает миниатюры и может не успеть.
+        # Лучше отдать профиль с точной дедупликацией, чем не отдать ничего.
+        unique, duplicates = dedup.exact_dedupe(collected)
+        warnings.append("pHash-дедупликация не уложилась в бюджет — схлопнуты только одинаковые файлы")
+
     yield StageEvent(
         stage=Stage.DEDUPED,
         message=f"Дубли удалены: −{len(duplicates)}",
