@@ -1,0 +1,331 @@
+"""Шаг 3 ТЗ: конвейер сборки профиля + живая воронка через SSE.
+
+Все сборщики стартуют параллельно (asyncio), общий бюджет — CAMPUSLENS_TOTAL_TIMEOUT
+(по умолчанию 25 с при требовании «до 30 секунд»). Что не успело — не блокирует
+ответ: отдаём то, что собрали, и честно пишем об этом в warnings.
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+from typing import AsyncIterator, Awaitable, Callable, Optional
+
+from app.config import get_settings
+from app.models import (
+    CategoryBucket,
+    Photo,
+    PhotoCategory,
+    Profile,
+    Stage,
+    StageEvent,
+    University,
+)
+from app.services import commons, dedup, evidence, wikidata
+
+log = logging.getLogger(__name__)
+
+# Порядок вкладок галереи на фронте (класс JUNK в UI не показывается).
+GALLERY_CATEGORIES = [
+    PhotoCategory.CAMPUS,
+    PhotoCategory.DORMS,
+    PhotoCategory.CLASSROOMS,
+    PhotoCategory.LIBRARIES,
+    PhotoCategory.LABS,
+    PhotoCategory.SPORTS,
+    PhotoCategory.STUDENT_LIFE,
+    PhotoCategory.CITY,
+]
+
+Collector = tuple[str, Callable[[], Awaitable[list[Photo]]]]
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.started = time.perf_counter()
+
+    @property
+    def elapsed_ms(self) -> int:
+        return int((time.perf_counter() - self.started) * 1000)
+
+    def remaining(self, budget: float) -> float:
+        return max(0.0, budget - (time.perf_counter() - self.started))
+
+
+async def _resolve_target(q: str | None, qid: str | None) -> tuple[Optional[University], list[University]]:
+    """Возвращает (выбранный вуз, кандидаты). Если выбор неоднозначен — вуза нет."""
+    if qid:
+        details = await wikidata.fetch_details([qid])
+        det = details.get(qid)
+        if not det:
+            return None, []
+        coords = wikidata.parse_point(det.get("coord")) or wikidata.parse_point(
+            det.get("city_coord")
+        )
+        uni = University(
+            id=qid,
+            name=det.get("label") or qid,
+            description=det.get("description"),
+            city=det.get("city"),
+            country=det.get("country"),
+            coordinates=coords,
+            website=det.get("website"),
+            commons_category=det.get("commons_category"),
+            logo_url=det.get("logo"),
+            inception=(det.get("inception") or "")[:10] or None,
+            wikidata_url=f"https://www.wikidata.org/wiki/{qid}",
+            match_score=1.0,
+        )
+        return uni, [uni]
+
+    candidates = await wikidata.resolve(q or "", limit=8)
+    if not candidates:
+        return None, []
+    if wikidata.is_ambiguous(candidates):
+        return None, candidates
+    return candidates[0], candidates
+
+
+def _build_collectors(uni: University) -> list[Collector]:
+    collectors: list[Collector] = []
+
+    if uni.commons_category:
+        async def by_category() -> list[Photo]:
+            return await commons.collect(
+                commons_category=uni.commons_category, coordinates=None
+            )
+
+        collectors.append((f"Commons: категория «{uni.commons_category}»", by_category))
+
+    if uni.coordinates:
+        coords = uni.coordinates
+
+        async def by_geo() -> list[Photo]:
+            return await commons.collect(commons_category=None, coordinates=coords)
+
+        radius = get_settings().geosearch_radius
+        collectors.append((f"Commons: геопоиск в радиусе {radius} м", by_geo))
+
+    # Шаг 8 ТЗ: сюда же подключаются Brave/SerpAPI и парсер сайта вуза.
+    return collectors
+
+
+def _make_buckets(photos: list[Photo], classification_ready: bool) -> list[CategoryBucket]:
+    buckets: list[CategoryBucket] = []
+    for cat in GALLERY_CATEGORIES:
+        items = [p for p in photos if p.category == cat]
+        empty_reason = None
+        if not items:
+            empty_reason = (
+                f"Подтверждённых фото по категории «{cat.value}» не найдено"
+                if classification_ready
+                else "Классификация по категориям подключается на шаге 5 — фото пока не разнесены"
+            )
+        buckets.append(CategoryBucket(category=cat, photos=items, empty_reason=empty_reason))
+
+    unsorted = [p for p in photos if p.category == PhotoCategory.UNKNOWN]
+    if unsorted:
+        buckets.append(
+            CategoryBucket(
+                category=PhotoCategory.UNKNOWN,
+                photos=unsorted,
+                empty_reason=None,
+            )
+        )
+    return buckets
+
+
+async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncIterator[StageEvent]:
+    """Асинхронный генератор этапов: найдено → дубли → отклонено → проверено."""
+    settings = get_settings()
+    clock = Clock()
+    warnings: list[str] = []
+
+    yield StageEvent(
+        stage=Stage.COLLECTING,
+        message="Ищем вуз в Wikidata…",
+        elapsed_ms=clock.elapsed_ms,
+    )
+
+    try:
+        uni, candidates = await asyncio.wait_for(
+            _resolve_target(q, qid), timeout=min(12.0, settings.total_timeout)
+        )
+    except asyncio.TimeoutError:
+        yield StageEvent(
+            stage=Stage.ERROR,
+            message="Wikidata не ответила за отведённое время",
+            elapsed_ms=clock.elapsed_ms,
+        )
+        return
+    except Exception as exc:  # noqa: BLE001
+        log.exception("resolve failed")
+        yield StageEvent(
+            stage=Stage.ERROR, message=f"Ошибка поиска вуза: {exc}", elapsed_ms=clock.elapsed_ms
+        )
+        return
+
+    if uni is None and candidates:
+        yield StageEvent(
+            stage=Stage.RESOLVED,
+            message="Нашлось несколько подходящих вузов — уточните выбор",
+            elapsed_ms=clock.elapsed_ms,
+            counts={"candidates": len(candidates)},
+            payload={
+                "needs_choice": True,
+                "candidates": [c.model_dump(mode="json") for c in candidates],
+            },
+        )
+        return
+
+    if uni is None:
+        yield StageEvent(
+            stage=Stage.ERROR,
+            message=f"По запросу «{q or qid}» вуз в Wikidata не найден",
+            elapsed_ms=clock.elapsed_ms,
+        )
+        return
+
+    yield StageEvent(
+        stage=Stage.RESOLVED,
+        message=f"Вуз определён: {uni.name}",
+        elapsed_ms=clock.elapsed_ms,
+        payload={"needs_choice": False, "university": uni.model_dump(mode="json")},
+    )
+
+    if not uni.commons_category:
+        warnings.append("У вуза в Wikidata не указана категория Commons (P373) — источников меньше")
+    if not uni.coordinates:
+        warnings.append("У вуза в Wikidata нет координат (P625) — геопоиск и геоулики недоступны")
+
+    collectors = _build_collectors(uni)
+    if not collectors:
+        yield StageEvent(
+            stage=Stage.DONE,
+            message="Нет ни одного доступного источника для этого вуза",
+            elapsed_ms=clock.elapsed_ms,
+            payload=Profile(
+                university=uni, verified=[], warnings=warnings, took_ms=clock.elapsed_ms
+            ).model_dump(mode="json"),
+        )
+        return
+
+    yield StageEvent(
+        stage=Stage.COLLECTING,
+        message=f"Запускаем параллельно источников: {len(collectors)}",
+        elapsed_ms=clock.elapsed_ms,
+        counts={"sources": len(collectors)},
+        payload={"sources": [name for name, _ in collectors]},
+    )
+
+    # --- параллельный сбор с общим дедлайном ---
+    tasks: dict[asyncio.Task[list[Photo]], str] = {}
+    for name, fn in collectors:
+        tasks[asyncio.create_task(fn())] = name
+
+    collected: list[Photo] = []
+    pending = set(tasks)
+    while pending:
+        remaining = clock.remaining(settings.total_timeout)
+        if remaining <= 0:
+            break
+        done, pending = await asyncio.wait(
+            pending, timeout=remaining, return_when=asyncio.FIRST_COMPLETED
+        )
+        if not done:
+            break
+        for task in done:
+            name = tasks[task]
+            try:
+                photos = task.result()
+            except Exception as exc:  # noqa: BLE001
+                log.warning("collector %s failed: %s", name, exc)
+                warnings.append(f"Источник «{name}» не ответил: {exc}")
+                continue
+            collected.extend(photos)
+            yield StageEvent(
+                stage=Stage.FOUND,
+                message=f"{name}: {len(photos)} файлов",
+                elapsed_ms=clock.elapsed_ms,
+                counts={"found_total": len(collected), "from_source": len(photos)},
+            )
+
+    for task in pending:
+        task.cancel()
+        warnings.append(f"Источник «{tasks[task]}» не уложился в {settings.total_timeout:.0f} с")
+
+    yield StageEvent(
+        stage=Stage.FOUND,
+        message=f"Найдено файлов: {len(collected)}",
+        elapsed_ms=clock.elapsed_ms,
+        counts={"found": len(collected)},
+    )
+
+    # --- дедупликация ---
+    unique, duplicates = dedup.dedupe(collected)
+    yield StageEvent(
+        stage=Stage.DEDUPED,
+        message=f"Дубли удалены: −{len(duplicates)}",
+        elapsed_ms=clock.elapsed_ms,
+        counts={"unique": len(unique), "duplicates": len(duplicates)},
+    )
+
+    # --- оценка достоверности ---
+    scored = [evidence.score_photo(p, uni.coordinates, uni.website) for p in unique]
+    verified: list[Photo] = []
+    needs_review: list[Photo] = []
+    rejected: list[Photo] = list(duplicates)
+    for photo in scored:
+        place = evidence.bucket(photo)
+        if place == "verified":
+            verified.append(photo)
+        elif place == "needs_review":
+            needs_review.append(photo)
+        else:
+            rejected.append(photo)
+
+    verified.sort(key=lambda p: p.confidence, reverse=True)
+    needs_review.sort(key=lambda p: p.confidence, reverse=True)
+
+    yield StageEvent(
+        stage=Stage.REJECTED,
+        message=f"Отклонено: {len(rejected)}",
+        elapsed_ms=clock.elapsed_ms,
+        counts={"rejected": len(rejected)},
+    )
+
+    if not verified and not needs_review:
+        warnings.append("Ни одного подтверждённого фото собрать не удалось — смотрите вкладку «Отклонено»")
+
+    profile = Profile(
+        university=uni,
+        verified=verified,
+        needs_review=needs_review,
+        rejected=rejected,
+        by_category=_make_buckets(verified, classification_ready=False),
+        stats={
+            "found": len(collected),
+            "unique": len(unique),
+            "duplicates": len(duplicates),
+            "verified": len(verified),
+            "needs_review": len(needs_review),
+            "rejected": len(rejected),
+            "sources": len(collectors),
+        },
+        warnings=warnings,
+        took_ms=clock.elapsed_ms,
+    )
+
+    yield StageEvent(
+        stage=Stage.VERIFIED,
+        message=f"Проверено: {len(verified)} (+{len(needs_review)} требуют проверки)",
+        elapsed_ms=clock.elapsed_ms,
+        counts={"verified": len(verified), "needs_review": len(needs_review)},
+    )
+    yield StageEvent(
+        stage=Stage.DONE,
+        message=f"Готово за {clock.elapsed_ms / 1000:.1f} с",
+        elapsed_ms=clock.elapsed_ms,
+        counts=profile.stats,
+        payload=profile.model_dump(mode="json"),
+    )

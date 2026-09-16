@@ -9,10 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.models import HealthResponse
-from app.routers import resolve
+from app.routers import profile, resolve
 from app.services.http import close_client
 
-VERSION = "0.1.0"
+VERSION = "0.3.0"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,6 +44,7 @@ app.add_middleware(
 )
 
 app.include_router(resolve.router, prefix="/api")
+app.include_router(profile.router, prefix="/api")
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["meta"])
