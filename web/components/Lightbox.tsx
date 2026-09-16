@@ -26,12 +26,12 @@ export function Lightbox({ photo, onClose }: { photo: Photo; onClose: () => void
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="grid w-full max-w-5xl gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 sm:p-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
+        className="grid w-full max-w-5xl gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 sm:gap-4 sm:p-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
       >
         <img
           src={photo.url}
           alt={photo.title}
-          className="max-h-[70vh] w-full rounded-xl object-contain"
+          className="max-h-[45vh] w-full rounded-xl object-contain sm:max-h-[70vh]"
         />
 
         <div className="flex flex-col gap-3 text-sm">
@@ -40,9 +40,9 @@ export function Lightbox({ photo, onClose }: { photo: Photo; onClose: () => void
             <button
               onClick={onClose}
               aria-label="Закрыть"
-              className="rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
+              className="shrink-0 rounded-lg border border-[var(--border)] px-2 py-1 text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
             >
-              Esc ✕
+              <span className="hidden sm:inline">Esc </span>✕
             </button>
           </div>
 

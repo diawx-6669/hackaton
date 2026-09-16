@@ -2,6 +2,16 @@
 
 import type { University } from "@/lib/types";
 
+/** P856 в Wikidata бывает заполнен мусором — new URL() на нём кидает
+ *  исключение и роняет весь список кандидатов. Разбираем безопасно. */
+function hostOf(url: string): string | null {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
 type Props = {
   candidates: University[];
   onPick: (u: University) => void;
@@ -40,7 +50,7 @@ export function CandidatePicker({ candidates, onPick }: Props) {
                     {c.coordinates.lat.toFixed(4)}, {c.coordinates.lon.toFixed(4)}
                   </span>
                 )}
-                {c.website && <span>🔗 {new URL(c.website).hostname}</span>}
+                {c.website && hostOf(c.website) && <span>🔗 {hostOf(c.website)}</span>}
                 <span>{c.commons_category ? "🖼 есть категория Commons" : "🖼 нет категории Commons"}</span>
               </span>
             </button>

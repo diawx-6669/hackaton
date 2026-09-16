@@ -64,13 +64,17 @@ export function ProfileView({ profile }: { profile: Profile }) {
     [photos, category],
   );
 
+  // empty_reason с бэкенда описывает ТОЛЬКО подтверждённые фото,
+  // поэтому во вкладках «Требует проверки» и «Отклонено» он не годится.
   const bucket = profile.by_category.find((b) => b.category === category);
   const emptyNote =
-    filtered.length === 0
-      ? category !== "all" && bucket?.empty_reason
+    filtered.length !== 0
+      ? null
+      : tab === "verified" && category !== "all" && bucket?.empty_reason
         ? bucket.empty_reason
-        : `В разделе «${TAB_TITLES[tab]}» пока пусто`
-      : null;
+        : category !== "all"
+          ? `В разделе «${TAB_TITLES[tab]}» нет фото категории «${CATEGORY_LABELS[category]}»`
+          : `В разделе «${TAB_TITLES[tab]}» пока пусто`;
 
   const rejectSummary = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -125,16 +129,20 @@ export function ProfileView({ profile }: { profile: Profile }) {
           </div>
         </div>
 
-        <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+        <dl className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-8">
           {Object.entries(profile.stats).map(([key, value]) => (
-            <div key={key} className="rounded-xl bg-[var(--surface-2)] px-3 py-2">
-              <dt className="text-xs text-[var(--muted)]">{STAT_LABELS[key] ?? key}</dt>
-              <dd className="font-mono text-lg">{value}</dd>
+            <div key={key} className="rounded-xl bg-[var(--surface-2)] px-2 py-2 sm:px-3">
+              <dt className="text-[11px] leading-tight text-[var(--muted)] sm:text-xs">
+                {STAT_LABELS[key] ?? key}
+              </dt>
+              <dd className="font-mono text-base sm:text-lg">{value}</dd>
             </div>
           ))}
-          <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2">
-            <dt className="text-xs text-[var(--muted)]">время</dt>
-            <dd className="font-mono text-lg">{(profile.took_ms / 1000).toFixed(1)} с</dd>
+          <div className="rounded-xl bg-[var(--surface-2)] px-2 py-2 sm:px-3">
+            <dt className="text-[11px] leading-tight text-[var(--muted)] sm:text-xs">время</dt>
+            <dd className="font-mono text-base sm:text-lg">
+              {(profile.took_ms / 1000).toFixed(1)} с
+            </dd>
           </div>
         </dl>
 
@@ -171,13 +179,14 @@ export function ProfileView({ profile }: { profile: Profile }) {
         />
       ) : (
         <>
-      {/* Вкладки */}
-      <div className="flex flex-wrap gap-2">
+      {/* Вкладки: на телефоне лента с прокруткой, иначе «Отклонено»
+          уезжало на отдельную строку во всю ширину. */}
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
         {(Object.keys(TAB_TITLES) as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`rounded-xl border px-3 py-2 text-sm ${
+            className={`shrink-0 whitespace-nowrap rounded-xl border px-3 py-2 text-xs sm:px-3 sm:text-sm ${
               tab === t
                 ? "border-[var(--accent)] bg-[var(--surface-2)]"
                 : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)]"
@@ -188,11 +197,12 @@ export function ProfileView({ profile }: { profile: Profile }) {
         ))}
       </div>
 
-      {/* Фильтры по категориям */}
-      <div className="flex flex-wrap gap-2 text-sm">
+      {/* Фильтры по категориям: на телефоне — прокручиваемая лента,
+          на широком экране обычный перенос по строкам. */}
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 text-sm sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
         <button
           onClick={() => setCategory("all")}
-          className={`rounded-lg border px-2.5 py-1 ${
+          className={`shrink-0 whitespace-nowrap rounded-lg border px-2.5 py-1.5 ${
             category === "all"
               ? "border-[var(--accent)]"
               : "border-[var(--border)] text-[var(--muted)]"
@@ -206,7 +216,7 @@ export function ProfileView({ profile }: { profile: Profile }) {
             <button
               key={c}
               onClick={() => setCategory(c)}
-              className={`rounded-lg border px-2.5 py-1 ${
+              className={`shrink-0 whitespace-nowrap rounded-lg border px-2.5 py-1.5 ${
                 category === c
                   ? "border-[var(--accent)]"
                   : "border-[var(--border)] text-[var(--muted)]"
@@ -233,7 +243,7 @@ export function ProfileView({ profile }: { profile: Profile }) {
           {emptyNote}
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((p) => (
             <PhotoCard key={`${tab}-${p.id}`} photo={p} onOpen={setLightbox} />
           ))}

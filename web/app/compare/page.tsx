@@ -93,7 +93,7 @@ export default function ComparePage() {
         <button
           type="submit"
           disabled={busy || a.trim().length < 2 || b.trim().length < 2}
-          className="rounded-xl bg-[var(--accent)] px-6 py-3 font-semibold text-[#08111f] disabled:opacity-40"
+          className="w-full rounded-xl bg-[var(--accent)] px-6 py-3 font-semibold text-[#08111f] disabled:opacity-40 sm:w-auto"
         >
           {busy ? "Собираем…" : "Сравнить"}
         </button>

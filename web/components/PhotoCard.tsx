@@ -37,14 +37,14 @@ export function PhotoCard({ photo, onOpen }: { photo: Photo; onOpen?: (p: Photo)
         />
         {!rejected && (
           <span
-            className="absolute right-2 top-2 rounded-lg bg-[#08111fdd] px-2 py-1 font-mono text-xs"
+            className="absolute right-1.5 top-1.5 rounded-lg bg-[#08111fdd] px-1.5 py-0.5 font-mono text-[11px] sm:right-2 sm:top-2 sm:px-2 sm:py-1 sm:text-xs"
             style={{ color: confidenceColor(photo.confidence) }}
           >
             {Math.round(photo.confidence * 100)}%
           </span>
         )}
         {rejected && (
-          <span className="absolute left-2 top-2 rounded-lg bg-[#08111fdd] px-2 py-1 text-xs text-[var(--bad)]">
+          <span className="absolute left-1.5 top-1.5 max-w-[85%] truncate rounded-lg bg-[#08111fdd] px-1.5 py-0.5 text-[11px] text-[var(--bad)] sm:left-2 sm:top-2 sm:px-2 sm:py-1 sm:text-xs">
             {REJECT_LABELS[photo.reject_reason!] ?? photo.reject_reason}
           </span>
         )}
@@ -55,8 +55,8 @@ export function PhotoCard({ photo, onOpen }: { photo: Photo; onOpen?: (p: Photo)
         )}
       </button>
 
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        <h3 className="line-clamp-2 text-sm font-medium" title={photo.title}>
+      <div className="flex flex-1 flex-col gap-1.5 p-2 sm:gap-2 sm:p-3">
+        <h3 className="line-clamp-2 text-[13px] font-medium sm:text-sm" title={photo.title}>
           {photo.title}
         </h3>
         {photo.category !== "unknown" && (
@@ -66,10 +66,10 @@ export function PhotoCard({ photo, onOpen }: { photo: Photo; onOpen?: (p: Photo)
         )}
 
         {rejected && photo.reject_detail && (
-          <p className="text-xs text-[var(--bad)]">Причина: {photo.reject_detail}</p>
+          <p className="text-[11px] text-[var(--bad)] sm:text-xs">Причина: {photo.reject_detail}</p>
         )}
 
-        <dl className="grid gap-1 text-xs text-[var(--muted)]">
+        <dl className="grid gap-1 text-[11px] text-[var(--muted)] sm:text-xs">
           <div className="flex gap-1">
             <dt className="shrink-0">Автор:</dt>
             <dd className="truncate">{photo.author || "не указан"}</dd>
@@ -107,16 +107,18 @@ export function PhotoCard({ photo, onOpen }: { photo: Photo; onOpen?: (p: Photo)
         </dl>
 
         <div className="mt-auto flex flex-col gap-2 pt-1">
-          <button
-            type="button"
-            onClick={() => setOpenEvidence((v) => !v)}
-            className="self-start text-xs text-[var(--accent)] underline"
-            aria-expanded={openEvidence}
-          >
-            {openEvidence ? "Скрыть улики" : "Показать улики"}
-          </button>
+          {photo.evidence.signals.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setOpenEvidence((v) => !v)}
+              className="self-start text-[11px] text-[var(--accent)] underline sm:text-xs"
+              aria-expanded={openEvidence}
+            >
+              {openEvidence ? "Скрыть улики" : "Показать улики"}
+            </button>
+          )}
 
-          {openEvidence && (
+          {openEvidence && photo.evidence.signals.length > 0 && (
             <div className="rounded-xl bg-[var(--surface-2)] p-2 text-xs">
               <ul className="grid gap-1.5">
                 {photo.evidence.signals.map((s) => (
@@ -151,7 +153,7 @@ export function PhotoCard({ photo, onOpen }: { photo: Photo; onOpen?: (p: Photo)
             href={photo.source_page_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="truncate text-xs text-[var(--accent)] underline"
+            className="truncate text-[11px] text-[var(--accent)] underline sm:text-xs"
           >
             Источник: {hostOf(photo.source_page_url)}
           </a>
