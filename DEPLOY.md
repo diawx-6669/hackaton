@@ -16,18 +16,48 @@
    - **Docker Build Context Directory:** `./api`
    - **Health Check Path:** `/api/health`
    - **Instance Type:** Free
-3. **Environment** → добавить переменные:
+3. **Environment** → добавить переменные. Сначала четыре обязательные:
+
+   | Ключ | Значение | Зачем |
+   |------|----------|-------|
+   | `CAMPUSLENS_USER_AGENT` | `CampusLens-AI/1.0 (LOCUS 2026; mailto:твоя@почта)` | Wikimedia режет анонимные запросы (429) |
+   | `CAMPUSLENS_CORS_ORIGINS` | адрес фронта на Vercel **со схемой**: `https://имя.vercel.app` | без него браузер блокирует все запросы к API |
+   | `CAMPUSLENS_AUTH_SECRET` | случайная строка, 32+ символа | без неё ключ подписи генерируется заново при каждом старте, и все разлогиниваются |
+   | `CAMPUSLENS_DEMO_ACCOUNT` | `jury@locus.kz:locus2026demo` | демо-доступ для жюри, создаётся при старте |
+
+   Секрет сгенерировать:
+   `python -c "import secrets; print(secrets.token_urlsafe(32))"`
+
+   > На шаге 1 адреса фронта ещё нет — поставь `http://localhost:3000`
+   > и вернись сюда после шага 2.
+
+   Дальше — ключ LLM, если нужно описание кампуса (шаг 6 ТЗ). Без ключа
+   профиль собирается как обычно, просто без текста. Достаточно одного:
+
+   | Ключ | Где взять |
+   |------|-----------|
+   | `GOOGLE_API_KEY` | <https://aistudio.google.com/apikey> (Gemini) |
+   | `GROQ_API_KEY` | <https://console.groq.com/keys> |
+   | `ANTHROPIC_API_KEY` | <https://console.anthropic.com> |
+
+   Провайдер выбирается сам по тому, какой ключ задан (порядок: gemini,
+   groq, anthropic). Задать явно — `CAMPUSLENS_LLM_PROVIDER`.
+
+   Остальные переменные имеют рабочие значения по умолчанию, но их удобно
+   задать явно — видно, куда сервис пишет:
 
    | Ключ | Значение |
    |------|----------|
-   | `CAMPUSLENS_USER_AGENT` | `CampusLens-AI/1.0 (LOCUS 2026; mailto:твоя@почта)` |
-   | `CAMPUSLENS_CORS_ORIGINS` | пока `http://localhost:3000`, поправим на шаге 3 |
    | `CAMPUSLENS_TOTAL_TIMEOUT` | `25` |
+   | `CAMPUSLENS_REQUIRE_AUTH` | `true` |
    | `CAMPUSLENS_CACHE_ENABLED` | `true` |
    | `CAMPUSLENS_CACHE_DIR` | `/app/data/cache` |
+   | `CAMPUSLENS_USERS_PATH` | `/app/data/users.json` |
+   | `CAMPUSLENS_UPLOAD_DIR` | `/app/data/uploads` |
+   | `CAMPUSLENS_SUBSCRIPTIONS_PATH` | `/app/data/subscriptions.json` |
 
-   > `CAMPUSLENS_USER_AGENT` обязателен: Wikimedia режет анонимные запросы (429).
-   > Если забыть, сервис стартует, но в логе будет предупреждение.
+   > `WORKDIR` образа — `/app`, поэтому значения по умолчанию (`data/…`)
+   > и так ведут в те же каталоги. Каталоги сервис создаёт сам.
 
 4. **Create Web Service**. После сборки проверить:
    `https://<имя>.onrender.com/api/health` → `{"status":"ok",...}`.
@@ -36,7 +66,10 @@
 **Про бесплатный тариф:** сервис засыпает после 15 минут простоя, первый
 запрос после сна поднимает контейнер ~30–60 с. Перед показом жюри открой
 `/api/health` заранее, чтобы сервис проснулся. Диск эфемерный — после
-передеплоя кеш пуст, это нормально.
+передеплоя пусты и кеш, и загруженные фото, и список зарегистрированных
+пользователей. Демо-аккаунт из `CAMPUSLENS_DEMO_ACCOUNT` создаётся заново
+при каждом старте, поэтому вход для жюри переживает передеплой; аккаунты,
+заведённые вручную, — нет.
 
 ---
 

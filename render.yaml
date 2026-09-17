@@ -1,4 +1,5 @@
 # Деплой бэкенда на Render. Фронтенд идёт на Vercel (root directory: web).
+# sync: false — значение задаётся в панели Render и в git не попадает.
 services:
   - type: web
     name: campuslens-api
@@ -8,15 +9,40 @@ services:
     healthCheckPath: /api/health
     plan: free
     envVars:
-      # Wikimedia требует контактный User-Agent — подставь свою почту.
+      # --- обязательные ---
+      # Wikimedia требует контактный User-Agent, иначе режет запросы (429).
       - key: CAMPUSLENS_USER_AGENT
         sync: false
-      # Адрес фронтенда на Vercel, например https://campuslens.vercel.app
+      # Адрес фронтенда на Vercel — обязательно со схемой https://
       - key: CAMPUSLENS_CORS_ORIGINS
         sync: false
+      # Секрет подписи сессий. Без него ключ генерируется заново при каждом
+      # старте, и все разлогиниваются после передеплоя или выхода из сна.
+      - key: CAMPUSLENS_AUTH_SECRET
+        generateValue: true
+      # Демо-доступ для жюри, создаётся при старте. Формат: почта:пароль
+      - key: CAMPUSLENS_DEMO_ACCOUNT
+        sync: false
+
+      # --- LLM-описание кампуса (шаг 6 ТЗ). Без ключа просто не включается ---
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+
+      # --- значения по умолчанию, менять не нужно ---
       - key: CAMPUSLENS_TOTAL_TIMEOUT
         value: "25"
+      - key: CAMPUSLENS_REQUIRE_AUTH
+        value: "true"
       - key: CAMPUSLENS_CACHE_ENABLED
         value: "true"
+      # WORKDIR образа — /app, поэтому пути абсолютные и явные.
       - key: CAMPUSLENS_CACHE_DIR
         value: /app/data/cache
+      - key: CAMPUSLENS_USERS_PATH
+        value: /app/data/users.json
+      - key: CAMPUSLENS_UPLOAD_DIR
+        value: /app/data/uploads
+      - key: CAMPUSLENS_SUBSCRIPTIONS_PATH
+        value: /app/data/subscriptions.json

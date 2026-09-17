@@ -310,6 +310,8 @@ docker run -p 8000:8000 --env-file .env campuslens-api
   категория Commons (P373), логотип (P154), дата основания (P571).
   Тип сущности проверяется обходом `P31/P279*` до «учебного заведения» — чтобы в выдачу
   не попадали одноимённые компании и станции метро. Данные Wikidata — CC0.
+  Если SPARQL недоступен (403 под нагрузкой), те же свойства берутся из Action API
+  (`wbgetentities`) — профиль собирается и без него.
 - **[Wikimedia Commons](https://commons.wikimedia.org)** — `list=categorymembers`
   (обход категории вуза и подкатегорий), `list=geosearch` (файлы с геотегом в радиусе),
   `prop=imageinfo|coordinates` c `extmetadata` для автора, лицензии, даты и GPS.
