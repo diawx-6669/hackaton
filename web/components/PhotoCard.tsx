@@ -48,11 +48,6 @@ export function PhotoCard({ photo, onOpen }: { photo: Photo; onOpen?: (p: Photo)
             {REJECT_LABELS[photo.reject_reason!] ?? photo.reject_reason}
           </span>
         )}
-        {photo.stale && !rejected && (
-          <span className="absolute bottom-2 left-2 rounded-lg bg-[#08111fdd] px-2 py-1 text-[10px] text-[var(--warn)]">
-            может быть устаревшим
-          </span>
-        )}
       </button>
 
       <div className="flex flex-1 flex-col gap-1.5 p-2 sm:gap-2 sm:p-3">

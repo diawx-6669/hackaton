@@ -134,7 +134,7 @@ class Photo(BaseModel):
     category_terms: list[str] = Field(
         default_factory=list, description="Слова, по которым сработал классификатор"
     )
-    stale: bool = Field(default=False, description="Снимку больше 5 лет — может быть устаревшим")
+    stale: bool = Field(default=False, description="Снимку больше 5 лет (влияет на улику «Свежесть»)")
     confidence: float = 0.0
     evidence: Evidence = Field(default_factory=Evidence)
     phash: Optional[str] = None

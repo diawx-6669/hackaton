@@ -53,11 +53,6 @@ export function Lightbox({ photo, onClose }: { photo: Photo; onClose: () => void
               {CATEGORY_LABELS[photo.category]}
               {photo.category_source === "metadata" ? " · по метаданным" : ""}
             </span>
-            {photo.stale && (
-              <span className="rounded-lg bg-[var(--warn)]/15 px-2 py-1 text-[var(--warn)]">
-                может быть устаревшим
-              </span>
-            )}
             {photo.reject_reason && (
               <span className="rounded-lg bg-[var(--bad)]/15 px-2 py-1 text-[var(--bad)]">
                 {REJECT_LABELS[photo.reject_reason] ?? photo.reject_reason}
