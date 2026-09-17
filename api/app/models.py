@@ -196,7 +196,7 @@ class Profile(BaseModel):
     university: University
     verified: list[Photo]
     needs_review: list[Photo] = Field(
-        default_factory=list, description="Низкий Confidence Score → «⚠️ Требует проверки»"
+        default_factory=list, description="Низкий Confidence Score → «Требует проверки»"
     )
     rejected: list[Photo] = Field(default_factory=list)
     by_category: list[CategoryBucket] = Field(default_factory=list)

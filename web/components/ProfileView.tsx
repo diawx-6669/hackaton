@@ -25,7 +25,7 @@ type Tab = "verified" | "needs_review" | "rejected";
 
 const TAB_TITLES: Record<Tab, string> = {
   verified: "Проверено",
-  needs_review: "⚠️ Требует проверки",
+  needs_review: "Требует проверки",
   rejected: "Отклонено",
 };
 

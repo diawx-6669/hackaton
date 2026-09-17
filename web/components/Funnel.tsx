@@ -46,13 +46,13 @@ function useSummary(events: StageEvent[]) {
       const others = rejectedEvent.counts.rejected - (deduped ?? 0);
       if (others > 0) steps.push(`Отклонено −${others}`);
     }
-    if (verified != null) steps.push(`✅ Проверено ${verified}`);
+    if (verified != null) steps.push(`Проверено ${verified}`);
     return steps;
   }, [events]);
 }
 
 /** Живая воронка: этапы от бэкенда + секундомер, который тикает в браузере. */
-export function Funnel({ events, running, startedAt }: Props) {
+export function Funnel({ events, running, startedAt, photosReady = false }: Props) {
   const [now, setNow] = useState(() => Date.now());
   const [expanded, setExpanded] = useState(false);
   const summary = useSummary(events);

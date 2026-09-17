@@ -5,6 +5,7 @@ import { myUploads, myWallet, uploadPhoto, uploadUrl } from "@/lib/api";
 import { AuthGate } from "@/components/AuthGate";
 import { useAuth } from "@/lib/auth";
 import type { UploadRecord, Wallet } from "@/lib/types";
+import { Pin } from "@/components/Icons";
 
 export default function MyPhotosPage() {
   const { user } = useAuth();
@@ -187,7 +188,12 @@ export default function MyPhotosPage() {
                   )}
                   <span className="flex items-center justify-between text-[var(--muted)]">
                     <span>+{item.coins}</span>
-                    {item.has_geotag && <span title="В файле была геометка">📍</span>}
+                    {item.has_geotag && (
+                      <span className="inline-flex items-center gap-1" title="В файле была геометка">
+                        <Pin className="h-3.5 w-3.5 opacity-70" />
+                        геометка
+                      </span>
+                    )}
                   </span>
                 </figcaption>
               </figure>
