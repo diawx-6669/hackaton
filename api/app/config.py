@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     wikidata_api: str = "https://www.wikidata.org/w/api.php"
     wikidata_sparql: str = "https://query.wikidata.org/sparql"
     commons_api: str = "https://commons.wikimedia.org/w/api.php"
+    # Overpass: окружение кампуса (п.8 ТЗ). Публичный инстанс, ключ не нужен,
+    # но есть лимиты — отсюда кеш и всего один ретрай.
+    overpass_api: str = "https://overpass-api.de/api/interpreter"
 
     @property
     def active_llm(self) -> tuple[str, str] | None:

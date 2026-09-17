@@ -121,6 +121,30 @@ export type Profile = {
   took_ms: number;
   /** true — фото уже показаны, но конвейер ещё дописывает описание кампуса. */
   partial?: boolean;
+  surroundings?: Surroundings | null;
+};
+
+export type SurroundingPlace = {
+  name: string;
+  distance_m: number;
+  walk_minutes: number;
+  osm_url: string;
+};
+
+export type SurroundingGroup = {
+  key: string;
+  title: string;
+  count: number;
+  nearest: SurroundingPlace[];
+  empty_reason?: string | null;
+};
+
+export type Surroundings = {
+  radius_m: number;
+  groups: SurroundingGroup[];
+  total: number;
+  available: boolean;
+  error?: string | null;
 };
 
 export type Stage =

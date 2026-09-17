@@ -192,6 +192,34 @@ class CampusDescription(BaseModel):
     model: str = ""
 
 
+class SurroundingPlace(BaseModel):
+    """Один объект рядом с кампусом по данным OpenStreetMap."""
+
+    name: str = Field(default="", description="Название из OSM; пустое — объект без имени")
+    distance_m: int = Field(..., description="Расстояние по прямой от координат кампуса")
+    walk_minutes: int = Field(..., description="Оценка пешком по прямой, не по маршруту")
+    osm_url: str
+
+
+class SurroundingGroup(BaseModel):
+    key: str
+    title: str
+    count: int
+    nearest: list[SurroundingPlace] = Field(default_factory=list)
+    # Честный флаг: в OSM объектов этой группы рядом нет.
+    empty_reason: Optional[str] = None
+
+
+class Surroundings(BaseModel):
+    """«Жизнь в радиусе 15 минут» (п.8 ТЗ) — только то, что отмечено в OSM."""
+
+    radius_m: int
+    groups: list[SurroundingGroup] = Field(default_factory=list)
+    total: int = 0
+    available: bool = True
+    error: Optional[str] = None
+
+
 class Profile(BaseModel):
     university: University
     verified: list[Photo]
@@ -208,6 +236,7 @@ class Profile(BaseModel):
         default=False,
         description="Фото уже готовы, но конвейер ещё работает (описание кампуса впереди)",
     )
+    surroundings: Optional[Surroundings] = None
 
 
 class ComparisonRow(BaseModel):

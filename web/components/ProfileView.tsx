@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { CampusSummary } from "./CampusSummary";
 import { Lightbox } from "./Lightbox";
 import { PhotoCard } from "./PhotoCard";
+import { SurroundingsBlock } from "./Surroundings";
 import {
   CATEGORY_LABELS,
   REJECT_LABELS,
@@ -155,6 +156,8 @@ export function ProfileView({ profile }: { profile: Profile }) {
           </ul>
         )}
       </header>
+
+      {profile.surroundings && <SurroundingsBlock data={profile.surroundings} />}
 
       {profile.description && <CampusSummary description={profile.description} />}
       {!profile.description && profile.partial && (

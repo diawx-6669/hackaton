@@ -69,3 +69,39 @@ async def get_json(
     assert last_exc is not None
     log.warning("GET %s failed: %s", url, last_exc)
     raise last_exc
+
+
+async def post_json(
+    url: str,
+    data: dict[str, Any],
+    *,
+    headers: dict[str, str] | None = None,
+    retries: int = 1,
+    timeout: float | None = None,
+) -> dict[str, Any]:
+    """POST формы с JSON-ответом. Нужен Overpass: длинный запрос не влезает в URL.
+
+    Ретраев меньше, чем у GET: Overpass под нагрузкой отвечает 429, и долбить
+    его повторами — верный способ получить бан на весь сервис.
+    """
+    client = await get_client()
+    delay = 0.6
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            r = await client.post(url, data=data, headers=headers, timeout=timeout)
+            if r.status_code in (429, 500, 502, 503, 504) and attempt < retries:
+                await asyncio.sleep(delay)
+                delay *= 2
+                continue
+            r.raise_for_status()
+            return r.json()
+        except (httpx.TransportError, httpx.HTTPStatusError) as exc:
+            last_exc = exc
+            if attempt >= retries:
+                break
+            await asyncio.sleep(delay)
+            delay *= 2
+    assert last_exc is not None
+    log.warning("POST %s failed: %s", url, last_exc)
+    raise last_exc

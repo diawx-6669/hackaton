@@ -22,9 +22,10 @@ from app.models import (
     Profile,
     Stage,
     StageEvent,
+    Surroundings,
     University,
 )
-from app.services import commons, dedup, describe, evidence, officialsite, wikidata
+from app.services import commons, dedup, describe, evidence, officialsite, osm, wikidata
 from app.services.classify import classify
 
 log = logging.getLogger(__name__)
@@ -286,6 +287,13 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
     if uni.website:
         site_task = asyncio.create_task(officialsite.collect_texts(uni.website))
 
+    # Окружение кампуса по OSM. Запрос независимый и лёгкий, поэтому идёт
+    # параллельно фотографиям и никогда не задерживает их показ: если Overpass
+    # не успел — в профиль уйдёт пометка, что источник не ответил.
+    osm_task: asyncio.Task[Surroundings | None] | None = None
+    if uni.coordinates:
+        osm_task = asyncio.create_task(osm.fetch_surroundings(uni.coordinates))
+
     collected: list[Photo] = []
     pending = set(tasks)
     while pending:
@@ -436,7 +444,10 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
         warnings.append("Ни одного подтверждённого фото собрать не удалось — смотрите вкладку «Отклонено»")
 
     def assemble(
-        description: CampusDescription | None, *, partial: bool
+        description: CampusDescription | None,
+        *,
+        partial: bool,
+        surroundings: Surroundings | None = None,
     ) -> Profile:
         return Profile(
             university=uni,
@@ -457,6 +468,7 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
             warnings=warnings,
             took_ms=clock.elapsed_ms,
             partial=partial,
+            surroundings=surroundings,
         )
 
     # Фото готовы — отдаём их немедленно, не дожидаясь LLM (п.7 ТЗ:
@@ -514,7 +526,20 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
                 counts={"claims": len(description.claims)},
             )
 
-    profile = assemble(description, partial=False)
+    surroundings: Surroundings | None = None
+    if osm_task is not None:
+        try:
+            surroundings = await asyncio.wait_for(
+                asyncio.shield(osm_task),
+                timeout=max(0.5, min(4.0, clock.remaining(settings.total_timeout))),
+            )
+        except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+            osm_task.cancel()
+            warnings.append("OpenStreetMap не успел ответить — блок «что рядом» не собран")
+        if surroundings is not None and not surroundings.available and surroundings.error:
+            warnings.append(surroundings.error)
+
+    profile = assemble(description, partial=False, surroundings=surroundings)
 
     yield StageEvent(
         stage=Stage.DONE,
