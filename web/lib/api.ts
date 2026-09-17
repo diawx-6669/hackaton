@@ -1,3 +1,4 @@
+import { authHeaders } from "./auth";
 import { getDeviceId } from "./device";
 import type { Comparison, ResolveResponse, StageEvent, UploadRecord, Wallet } from "./types";
 
@@ -84,7 +85,9 @@ export async function compareUniversities(
 
 /** Загрузки и кошелёк опознают пользователя по идентификатору устройства. */
 function deviceHeaders(): HeadersInit {
-  return { "X-Device-Id": getDeviceId() };
+  // Токен важнее: с ним фото привязаны к аккаунту и видны с любого
+  // устройства. Без входа остаётся анонимный идентификатор браузера.
+  return { "X-Device-Id": getDeviceId(), ...authHeaders() };
 }
 
 export async function uploadPhoto(

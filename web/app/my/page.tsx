@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { myUploads, myWallet, uploadPhoto, uploadUrl } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import type { UploadRecord, Wallet } from "@/lib/types";
 
 export default function MyPhotosPage() {
+  const { user } = useAuth();
   const [items, setItems] = useState<UploadRecord[]>([]);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [busy, setBusy] = useState(false);
@@ -75,6 +78,19 @@ export default function MyPhotosPage() {
           Учишься здесь? Сфотографируй место и загрузи — за каждый принятый снимок
           начисляются бонусы.
         </p>
+        {user ? (
+          <p className="mt-2 text-xs text-[var(--muted)]">
+            Аккаунт: <span className="text-[var(--foreground)]">{user.email}</span> — фото и бонусы
+            доступны с любого устройства.
+          </p>
+        ) : (
+          <p className="mt-2 text-xs text-[var(--warn)]">
+            Вы не вошли: фото привязаны к этому браузеру и пропадут при очистке данных.{" "}
+            <Link href="/login" className="text-[var(--accent)] underline">
+              Войти
+            </Link>
+          </p>
+        )}
       </header>
 
       {/* Кошелёк */}
@@ -197,11 +213,24 @@ export default function MyPhotosPage() {
           нет ничего из этого. Поэтому она живёт отдельным разделом и не влияет на
           достоверность профиля вуза.
         </p>
-        <p>
-          Аккаунтов в сервисе нет: «свои» фото и бонусы привязаны к этому браузеру.
-          Очистка данных браузера обнулит историю. От накрутки бонусы не защищены —
-          это демонстрация механики, а не рабочая программа лояльности.
-        </p>
+        {user ? (
+          <p>
+            Фото и бонусы привязаны к аккаунту и доступны с любого устройства. Учтите:
+            на бесплатном хостинге диск эфемерный, поэтому после передеплоя сервиса
+            и аккаунты, и загруженное исчезнут. От накрутки бонусы не защищены — это
+            демонстрация механики, а не рабочая программа лояльности.
+          </p>
+        ) : (
+          <p>
+            Вы не вошли, поэтому «свои» фото и бонусы привязаны к этому браузеру:
+            очистка данных обнулит историю.{" "}
+            <Link href="/login" className="text-[var(--accent)] underline">
+              Войдите
+            </Link>
+            , чтобы они были доступны с любого устройства. От накрутки бонусы не
+            защищены — это демонстрация механики, а не программа лояльности.
+          </p>
+        )}
       </footer>
     </main>
   );

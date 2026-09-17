@@ -192,6 +192,7 @@ def test_deployment_warnings_fire_on_default_config(caplog):
     text = " ".join(r.message for r in caplog.records)
     assert "CAMPUSLENS_USER_AGENT" in text
     assert "CORS" in text
+    assert "CAMPUSLENS_AUTH_SECRET" in text
 
     caplog.clear()
     with caplog.at_level(logging.WARNING, logger="campuslens"):
@@ -200,6 +201,7 @@ def test_deployment_warnings_fire_on_default_config(caplog):
                 _env_file=None,
                 user_agent="CampusLens/1.0 (mailto:me@example.com)",
                 cors_origins="https://campuslens.vercel.app",
+                auth_secret="long-random-secret",
             )
         )
     assert not caplog.records, "правильная конфигурация не должна ничего предупреждать"

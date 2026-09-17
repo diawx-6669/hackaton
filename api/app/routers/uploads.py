@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse
 
 from app.config import get_settings
 from app.models import UploadListResponse, UploadRecord, WalletResponse
+from app.routers.auth import current_user
 from app.services.uploads import UploadError, UploadStore
 
 router = APIRouter(tags=["uploads"])
@@ -29,13 +30,23 @@ def _store() -> UploadStore:
     return UploadStore(Path(get_settings().upload_dir))
 
 
-def _device(device_id: str | None) -> str:
+async def _owner(authorization: str | None, device_id: str | None) -> str:
+    """Чьи это фото.
+
+    Вошедший пользователь опознаётся по токену — тогда его снимки видны
+    с любого устройства. Без входа остаётся анонимный идентификатор
+    браузера, как было раньше.
+    """
+    user = await current_user(authorization)
+    if user is not None:
+        return f"user:{user['id']}"
+
     if not device_id or not _DEVICE_RE.match(device_id):
         raise HTTPException(
             status_code=400,
-            detail="Нужен заголовок X-Device-Id (8–64 символа: буквы, цифры, дефис)",
+            detail="Войдите в аккаунт или передайте заголовок X-Device-Id",
         )
-    return device_id
+    return f"device:{device_id}"
 
 
 def _to_model(record: dict) -> UploadRecord:
@@ -56,16 +67,17 @@ def _to_model(record: dict) -> UploadRecord:
 async def upload_photo(
     file: Annotated[UploadFile, File(description="JPEG, PNG или WebP до 8 МБ")],
     x_device_id: Annotated[str | None, Header()] = None,
+    authorization: Annotated[str | None, Header()] = None,
     university_id: Annotated[Optional[str], Form()] = None,
     university_name: Annotated[Optional[str], Form()] = None,
     caption: Annotated[Optional[str], Form()] = None,
 ) -> UploadRecord:
-    device = _device(x_device_id)
+    owner = await _owner(authorization, x_device_id)
     content = await file.read()
 
     try:
         record = await _store().save(
-            device_id=device,
+            device_id=owner,
             content=content,
             content_type=file.content_type or "",
             university_id=university_id,
@@ -81,16 +93,22 @@ async def upload_photo(
 
 
 @router.get("/uploads", response_model=UploadListResponse)
-async def my_uploads(x_device_id: Annotated[str | None, Header()] = None) -> UploadListResponse:
-    device = _device(x_device_id)
-    records = await _store().list_for_device(device)
+async def my_uploads(
+    x_device_id: Annotated[str | None, Header()] = None,
+    authorization: Annotated[str | None, Header()] = None,
+) -> UploadListResponse:
+    owner = await _owner(authorization, x_device_id)
+    records = await _store().list_for_device(owner)
     return UploadListResponse(items=[_to_model(r) for r in records])
 
 
 @router.get("/wallet", response_model=WalletResponse)
-async def wallet(x_device_id: Annotated[str | None, Header()] = None) -> WalletResponse:
-    device = _device(x_device_id)
-    return WalletResponse(**await _store().wallet(device))
+async def wallet(
+    x_device_id: Annotated[str | None, Header()] = None,
+    authorization: Annotated[str | None, Header()] = None,
+) -> WalletResponse:
+    owner = await _owner(authorization, x_device_id)
+    return WalletResponse(**await _store().wallet(owner))
 
 
 @router.get("/uploads/{filename}")

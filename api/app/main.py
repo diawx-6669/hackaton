@@ -9,11 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.models import HealthResponse
-from app.routers import compare, profile, resolve, subscribe, uploads
+from app.routers import auth, compare, profile, resolve, subscribe, uploads
 from app.services.cache import get_cache
 from app.services.http import close_client
 
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,6 +30,11 @@ def _check_deployment_config(settings) -> None:
         log.warning(
             "CAMPUSLENS_USER_AGENT не задан. Wikimedia режет анонимные запросы (429) — "
             "укажите контактный User-Agent в переменных окружения."
+        )
+    if not settings.auth_secret:
+        log.warning(
+            "CAMPUSLENS_AUTH_SECRET не задан — после перезапуска сервиса все "
+            "пользователи разлогинятся. Задайте длинную случайную строку."
         )
     if all("localhost" in o or "127.0.0.1" in o for o in settings.cors_origin_list):
         log.warning(
@@ -68,6 +73,7 @@ app.include_router(profile.router, prefix="/api")
 app.include_router(compare.router, prefix="/api")
 app.include_router(subscribe.router, prefix="/api")
 app.include_router(uploads.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["meta"])

@@ -239,6 +239,28 @@ class SubscribeResponse(BaseModel):
     queue_size: int
 
 
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+    name: Optional[str] = Field(default=None, max_length=60)
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=1, max_length=128)
+
+
+class UserPublic(BaseModel):
+    id: str
+    email: str
+    name: str
+
+
+class AuthResponse(BaseModel):
+    token: str
+    user: UserPublic
+
+
 class SiteText(BaseModel):
     """Фрагмент текста со страницы официального сайта вуза."""
 

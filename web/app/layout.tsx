@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Unbounded } from "next/font/google";
 import { CosmicScene } from "@/components/CosmicScene";
+import { AuthProvider } from "@/lib/auth";
 import { SiteHeader } from "@/components/SiteHeader";
 import "./globals.css";
 
@@ -46,8 +47,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body>
         <CosmicScene />
-        <SiteHeader />
-        {children}
+        <AuthProvider>
+          <SiteHeader />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
