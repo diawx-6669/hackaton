@@ -119,6 +119,8 @@ export type Profile = {
   description?: CampusDescription | null;
   warnings: string[];
   took_ms: number;
+  /** true — фото уже показаны, но конвейер ещё дописывает описание кампуса. */
+  partial?: boolean;
 };
 
 export type Stage =

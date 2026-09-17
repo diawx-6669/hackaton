@@ -284,3 +284,20 @@ async def test_phash_does_not_download_thumbnails_of_rejected_photos(full_mock, 
 
     shown_ids = {p["id"] for p in [*profile["verified"], *profile["needs_review"]]}
     assert set(hashed) <= shown_ids, "качаем только то, что реально показываем"
+
+
+async def test_verified_event_carries_photos_before_description(full_mock):
+    """Фото должны уходить на стадии verified — до похода в LLM (п.7 ТЗ)."""
+    events = await collect_events(qid=fixtures.QID)
+    verified = next(e for e in events if e.stage is Stage.VERIFIED)
+
+    assert verified.payload is not None, "verified обязан нести готовый профиль"
+    assert verified.payload["partial"] is True
+    assert verified.payload["description"] is None
+    # Набор фото тот же, что и в финальном профиле: описание ничего не меняет.
+    done = events[-1].payload
+    assert done["partial"] is False
+    assert [p["id"] for p in verified.payload["verified"]] == [
+        p["id"] for p in done["verified"]
+    ]
+    assert verified.payload["stats"] == done["stats"]

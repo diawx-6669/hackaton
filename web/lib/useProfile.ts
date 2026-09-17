@@ -36,7 +36,9 @@ export function useProfileRun() {
           if (event.stage === "resolved" && event.payload?.needs_choice) {
             setCandidates(event.payload.candidates as University[]);
           }
-          if (event.stage === "done" && event.payload) {
+          // Фото приходят на стадии verified — показываем их сразу, не дожидаясь
+          // описания от LLM. Событие done присылает тот же профиль с описанием.
+          if ((event.stage === "verified" || event.stage === "done") && event.payload) {
             setProfile(event.payload as unknown as Profile);
           }
           if (event.stage === "error") {

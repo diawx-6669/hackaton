@@ -42,7 +42,7 @@ export default function UniversityPage({ params }: { params: Promise<{ qid: stri
       )}
 
       <AuthGate>
-        <Funnel events={events} running={running} startedAt={startedAt} />
+        <Funnel events={events} running={running} startedAt={startedAt} photosReady={!!profile} />
         {profile && <ProfileView profile={profile} />}
       </AuthGate>
     </main>

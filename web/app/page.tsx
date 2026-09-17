@@ -60,7 +60,7 @@ export default function Home() {
         </p>
       )}
 
-      <Funnel events={events} running={running} startedAt={startedAt} />
+      <Funnel events={events} running={running} startedAt={startedAt} photosReady={!!profile} />
 
       {candidates && !profile && (
         <CandidatePicker

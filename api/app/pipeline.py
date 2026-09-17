@@ -435,6 +435,41 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
     if not verified and not needs_review:
         warnings.append("Ни одного подтверждённого фото собрать не удалось — смотрите вкладку «Отклонено»")
 
+    def assemble(
+        description: CampusDescription | None, *, partial: bool
+    ) -> Profile:
+        return Profile(
+            university=uni,
+            verified=verified,
+            needs_review=needs_review,
+            rejected=rejected,
+            by_category=_make_buckets(verified, classification_ready=True),
+            description=description,
+            stats={
+                "found": len(collected),
+                "unique": len(unique),
+                "duplicates": len(duplicates),
+                "verified": len(verified),
+                "needs_review": len(needs_review),
+                "rejected": len(rejected),
+                "sources": len(collectors),
+            },
+            warnings=warnings,
+            took_ms=clock.elapsed_ms,
+            partial=partial,
+        )
+
+    # Фото готовы — отдаём их немедленно, не дожидаясь LLM (п.7 ТЗ:
+    # «фото отправлять по мере готовности»). Описание догонит в DONE.
+    partial_profile = assemble(None, partial=True)
+    yield StageEvent(
+        stage=Stage.VERIFIED,
+        message=f"Проверено: {len(verified)} (+{len(needs_review)} требуют проверки)",
+        elapsed_ms=clock.elapsed_ms,
+        counts={"verified": len(verified), "needs_review": len(needs_review)},
+        payload=partial_profile.model_dump(mode="json"),
+    )
+
     # --- описание кампуса (шаг 6 ТЗ) ---
     description: CampusDescription | None = None
     if verified or needs_review:
@@ -479,32 +514,8 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
                 counts={"claims": len(description.claims)},
             )
 
-    profile = Profile(
-        university=uni,
-        verified=verified,
-        needs_review=needs_review,
-        rejected=rejected,
-        by_category=_make_buckets(verified, classification_ready=True),
-        description=description,
-        stats={
-            "found": len(collected),
-            "unique": len(unique),
-            "duplicates": len(duplicates),
-            "verified": len(verified),
-            "needs_review": len(needs_review),
-            "rejected": len(rejected),
-            "sources": len(collectors),
-        },
-        warnings=warnings,
-        took_ms=clock.elapsed_ms,
-    )
+    profile = assemble(description, partial=False)
 
-    yield StageEvent(
-        stage=Stage.VERIFIED,
-        message=f"Проверено: {len(verified)} (+{len(needs_review)} требуют проверки)",
-        elapsed_ms=clock.elapsed_ms,
-        counts={"verified": len(verified), "needs_review": len(needs_review)},
-    )
     yield StageEvent(
         stage=Stage.DONE,
         message=f"Готово за {clock.elapsed_ms / 1000:.1f} с",

@@ -204,6 +204,10 @@ class Profile(BaseModel):
     description: Optional[CampusDescription] = None
     warnings: list[str] = Field(default_factory=list)
     took_ms: int = 0
+    partial: bool = Field(
+        default=False,
+        description="Фото уже готовы, но конвейер ещё работает (описание кампуса впереди)",
+    )
 
 
 class ComparisonRow(BaseModel):

@@ -72,6 +72,12 @@ collecting → resolved → found → deduped → classified → rejected → ve
 `asyncio.wait`), общий дедлайн — `CAMPUSLENS_TOTAL_TIMEOUT` (25 с при требовании «до 30»).
 Что не успело — отменяется, ответ не блокируется, а причина попадает в `warnings`.
 
+**Фото не ждут описания.** Событие `verified` уже несёт готовый профиль
+(`partial: true`) — галерея рисуется сразу, пока LLM ещё пишет текст. Событие `done`
+присылает тот же профиль с описанием и `partial: false`. На практике это выносит
+галерею на экран за пару секунд вместо ожидания всего бюджета.
+
+
 **Confidence Score.** Взвешенная сумма улик, каждая видна в карточке фото:
 
 | Улика | Вес | Что значит |
@@ -268,7 +274,7 @@ docker run -p 8000:8000 --env-file .env campuslens-api
 |-------|------|----------|
 | `GET` | `/api/health` | health-check |
 | `GET` | `/api/resolve?q=&limit=` | кандидаты-вузы из Wikidata, флаг `ambiguous` |
-| `GET` | `/api/profile?q=` или `?id=Q…` | **SSE**: поток этапов, последнее событие `done` несёт профиль |
+| `GET` | `/api/profile?q=` или `?id=Q…` | **SSE**: поток этапов; `verified` несёт фото (`partial: true`), `done` — профиль с описанием |
 | `GET` | `/api/profile.json?q=` или `?id=Q…` | тот же конвейер одним JSON-ответом (для curl и тестов) |
 | `GET` | `/api/compare?a=&b=` (или `a_id`/`b_id`) | сравнение двух вузов, оба профиля собираются параллельно |
 | `POST` | `/api/subscribe` | заявка «не нашли свой вуз» |

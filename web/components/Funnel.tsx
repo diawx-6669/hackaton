@@ -27,9 +27,11 @@ type Props = {
   events: StageEvent[];
   running: boolean;
   startedAt: number | null;
+  /** Фото уже на экране — воронку сворачиваем, чтобы не отодвигать галерею вниз. */
+  photosReady?: boolean;
 };
 
-/** Сжатая строка воронки из ТЗ: Найдено → Дубли → Отклонено → ✅ Проверено. */
+/** Сжатая строка воронки из ТЗ: Найдено → Дубли → Отклонено → Проверено. */
 function useSummary(events: StageEvent[]) {
   return useMemo(() => {
     const last = (stage: string) => [...events].reverse().find((e) => e.stage === stage);
@@ -69,9 +71,11 @@ export function Funnel({ events, running, startedAt, photosReady = false }: Prop
   const elapsed = running && startedAt ? now - startedAt : lastElapsed;
   const seconds = (elapsed / 1000).toFixed(1);
 
-  // Пока идёт сбор — показываем этапы вживую. Когда закончили, сворачиваем
-  // в одну строку: на телефоне одиннадцать строк съедали весь экран.
-  const showSteps = running || expanded;
+  // Пока идёт сбор — показываем этапы вживую. Как только пришли фото (или
+  // конвейер закончил), сворачиваем в одну строку: одиннадцать строк
+  // отодвигали галерею за нижний край экрана.
+  const compact = !running || photosReady;
+  const showSteps = !compact || expanded;
 
   return (
     <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 sm:p-5">
@@ -87,7 +91,7 @@ export function Funnel({ events, running, startedAt, photosReady = false }: Prop
         </span>
       </header>
 
-      {!running && summary && (
+      {compact && summary && (
         <p className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm">
           {summary.map((step, i) => (
             <span key={step} className="flex items-center gap-1.5">
@@ -98,7 +102,7 @@ export function Funnel({ events, running, startedAt, photosReady = false }: Prop
         </p>
       )}
 
-      {!running && events.length > 0 && (
+      {compact && events.length > 0 && (
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
