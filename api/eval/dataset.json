@@ -1,0 +1,186 @@
+{
+  "_readme": [
+    "Размеченный набор для замера точности (п.10 ТЗ).",
+    "",
+    "ВАЖНО про происхождение данных: записи ниже написаны вручную и моделируют",
+    "реальные соглашения об именовании файлов и категорий в Wikimedia Commons.",
+    "Это НЕ выборка из настоящего Commons. Цифры, полученные на этом наборе,",
+    "измеряют качество наших правил на контрольных случаях, а не поведение",
+    "сервиса на живых данных.",
+    "",
+    "Чтобы получить честный замер на настоящих файлах, соберите свой набор:",
+    "  python -m eval.run_eval --template Q1798175 > eval/real.json",
+    "затем проставьте expected_* руками и запустите:",
+    "  python -m eval.run_eval --dataset eval/real.json"
+  ],
+  "university": {
+    "name": "Kazakh-British Technical University",
+    "aliases": ["KBTU", "КБТУ", "Казахстанско-Британский технический университет"],
+    "coordinates": { "lat": 43.236, "lon": 76.929 },
+    "website": "https://kbtu.edu.kz/"
+  },
+  "items": [
+    {
+      "title": "KBTU main building.jpg",
+      "description": "Main building of the Kazakh-British Technical University",
+      "commons_categories": ["Kazakh-British Technical University"],
+      "source_kinds": ["commons_category"],
+      "coordinates": { "lat": 43.2361, "lon": 76.9291 },
+      "license": "CC BY-SA 4.0",
+      "date": "2023-05-14",
+      "expected_keep": true,
+      "expected_category": "campus"
+    },
+    {
+      "title": "KBTU library reading room.jpg",
+      "description": "Reading room of the university library",
+      "commons_categories": ["Kazakh-British Technical University"],
+      "source_kinds": ["commons_category"],
+      "license": "CC BY-SA 4.0",
+      "date": "2022-09-01",
+      "expected_keep": true,
+      "expected_category": "libraries"
+    },
+    {
+      "title": "KBTU dormitory block B.jpg",
+      "description": "Student dormitory",
+      "commons_categories": ["Kazakh-British Technical University", "Dormitories in Almaty"],
+      "source_kinds": ["commons_category"],
+      "license": "CC BY-SA 4.0",
+      "date": "2021-04-10",
+      "expected_keep": true,
+      "expected_category": "dorms"
+    },
+    {
+      "title": "Chemistry laboratory KBTU.jpg",
+      "description": "Laboratory of the university",
+      "commons_categories": ["Kazakh-British Technical University"],
+      "source_kinds": ["commons_category"],
+      "license": "CC BY-SA 4.0",
+      "date": "2023-02-20",
+      "expected_keep": true,
+      "expected_category": "labs"
+    },
+    {
+      "title": "KBTU swimming pool.jpg",
+      "description": "University sports complex with a swimming pool",
+      "commons_categories": ["Kazakh-British Technical University"],
+      "source_kinds": ["commons_category"],
+      "license": "CC BY-SA 4.0",
+      "date": "2024-01-15",
+      "expected_keep": true,
+      "expected_category": "sports"
+    },
+    {
+      "title": "Graduation ceremony KBTU 2019.jpg",
+      "description": "Students at the graduation ceremony",
+      "commons_categories": ["Kazakh-British Technical University"],
+      "source_kinds": ["commons_category"],
+      "license": "CC BY-SA 4.0",
+      "date": "2019-06-20",
+      "expected_keep": true,
+      "expected_category": "student_life"
+    },
+    {
+      "title": "Lecture hall 201 KBTU.jpg",
+      "description": "Lecture hall",
+      "commons_categories": ["Kazakh-British Technical University"],
+      "source_kinds": ["commons_category"],
+      "license": "CC BY-SA 4.0",
+      "date": "2023-10-02",
+      "expected_keep": true,
+      "expected_category": "classrooms"
+    },
+    {
+      "title": "Panorama of Almaty city center.jpg",
+      "description": "View of the city",
+      "commons_categories": ["Almaty"],
+      "source_kinds": ["commons_geosearch"],
+      "coordinates": { "lat": 43.2380, "lon": 76.9310 },
+      "license": "CC BY-SA 4.0",
+      "date": "2023-07-07",
+      "expected_keep": true,
+      "expected_category": "city"
+    },
+    {
+      "title": "KBTU logo.svg",
+      "description": "Logo of the university",
+      "commons_categories": ["Kazakh-British Technical University"],
+      "source_kinds": ["commons_category"],
+      "license": "CC BY-SA 4.0",
+      "mime": "image/svg+xml",
+      "expected_keep": false,
+      "expected_category": "junk"
+    },
+    {
+      "title": "Coat of arms of KBTU.png",
+      "description": "Emblem",
+      "commons_categories": ["Kazakh-British Technical University"],
+      "source_kinds": ["commons_category"],
+      "license": "CC BY-SA 4.0",
+      "expected_keep": false,
+      "expected_category": "junk"
+    },
+    {
+      "title": "Map of Almaty districts.jpg",
+      "description": "Map of the city districts",
+      "commons_categories": ["Maps of Almaty"],
+      "source_kinds": ["commons_geosearch"],
+      "coordinates": { "lat": 43.2370, "lon": 76.9300 },
+      "license": "CC BY-SA 4.0",
+      "expected_keep": false,
+      "expected_category": "junk"
+    },
+    {
+      "title": "Portrait of the rector.jpg",
+      "description": "Portrait",
+      "commons_categories": ["Kazakh-British Technical University"],
+      "source_kinds": ["commons_category"],
+      "license": "CC BY-SA 4.0",
+      "expected_keep": false,
+      "expected_category": "junk"
+    },
+    {
+      "title": "Apartment block in Almaty.jpg",
+      "description": "Residential building",
+      "commons_categories": ["Buildings in Almaty"],
+      "source_kinds": ["commons_geosearch"],
+      "coordinates": { "lat": 43.2405, "lon": 76.9340 },
+      "license": "CC BY-SA 4.0",
+      "date": "2020-03-03",
+      "expected_keep": false,
+      "expected_category": "campus"
+    },
+    {
+      "title": "Kazakh National University main gate.jpg",
+      "description": "Main gate of Al-Farabi Kazakh National University",
+      "commons_categories": ["Al-Farabi Kazakh National University"],
+      "source_kinds": ["commons_geosearch"],
+      "coordinates": { "lat": 43.2200, "lon": 76.9100 },
+      "license": "CC BY-SA 4.0",
+      "date": "2022-05-05",
+      "expected_keep": false,
+      "expected_category": "campus"
+    },
+    {
+      "title": "Stock photo of a student.jpg",
+      "description": "Student with a laptop",
+      "commons_categories": [],
+      "source_kinds": ["web_search"],
+      "source_page_url": "https://www.shutterstock.com/image/123",
+      "license": "Royalty free",
+      "expected_keep": false,
+      "expected_category": "student_life"
+    },
+    {
+      "title": "IMG 0042.jpg",
+      "description": "",
+      "commons_categories": [],
+      "source_kinds": ["commons_geosearch"],
+      "coordinates": { "lat": 43.2500, "lon": 76.9500 },
+      "license": "CC BY-SA 4.0",
+      "expected_keep": false,
+      "expected_category": "unknown"
+    }
+  ]
+}

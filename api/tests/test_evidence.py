@@ -121,3 +121,46 @@ def test_geosearch_photo_without_any_link_is_rejected_as_wrong_university():
     )
     assert stranger.reject_reason is RejectReason.NOT_THIS_UNIVERSITY
     assert "геопоиску" in stranger.reject_detail
+
+
+def test_other_universitys_photo_is_rejected_regardless_of_score():
+    """Худшая ошибка по ТЗ — уверенно показать чужое фото как своё."""
+    stranger = evidence.score_photo(
+        make_photo(
+            title="Kazakh National University main gate.jpg",
+            commons_categories=["Al-Farabi Kazakh National University"],
+            coordinates=Coordinates(lat=43.2361, lon=76.9291),  # рядом с кампусом
+            source_kinds=[SourceKind.COMMONS_GEOSEARCH],
+        ),
+        CAMPUS,
+        None,
+        ["Kazakh-British Technical University", "KBTU"],
+    )
+    assert stranger.reject_reason is RejectReason.NOT_THIS_UNIVERSITY
+    assert evidence.bucket(stranger) == "rejected"
+    # Балл мог быть неплохим за счёт близкого геотега — правило важнее балла.
+    assert stranger.confidence > evidence.REVIEW_THRESHOLD
+
+
+def test_city_view_nearby_is_still_allowed():
+    """Вид города не претендует на принадлежность вузу — его отсекать нельзя."""
+    from app.models import PhotoCategory
+
+    city = make_photo(
+        title="Panorama of Almaty city center.jpg",
+        coordinates=Coordinates(lat=43.2380, lon=76.9310),
+        source_kinds=[SourceKind.COMMONS_GEOSEARCH],
+    )
+    city.category = PhotoCategory.CITY
+    scored = evidence.score_photo(city, CAMPUS, None, ["KBTU"])
+    assert scored.reject_reason is None
+
+
+def test_photo_from_university_category_is_not_touched_by_the_rule():
+    own = evidence.score_photo(
+        make_photo(title="IMG 1234.jpg", source_kinds=[SourceKind.COMMONS_CATEGORY]),
+        CAMPUS,
+        None,
+        ["KBTU"],
+    )
+    assert own.reject_reason is None, "файл из категории вуза связан с ним по определению"

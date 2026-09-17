@@ -283,9 +283,28 @@ def score_photo(
     photo.evidence = ev
     photo.confidence = round(score, 3)
 
+    # Ничто не связывает снимок с этим вузом: он не лежит в его категории,
+    # не найден поиском по названию, названия нет и в метаданных. Такой файл
+    # нельзя показывать в профиле вуза независимо от балла — уверенно выдать
+    # чужое здание за кампус хуже, чем не показать ничего.
+    #
+    # Исключение — виды города: они и не претендуют на принадлежность вузу,
+    # для них достаточно того, что снято рядом с кампусом.
+    unlinked = not mentions and not (
+        SourceKind.COMMONS_CATEGORY in photo.source_kinds
+        or SourceKind.COMMONS_SEARCH in photo.source_kinds
+        or SourceKind.OFFICIAL_SITE in photo.source_kinds
+    )
+    if photo.reject_reason is None and unlinked and photo.category is not PhotoCategory.CITY:
+        photo.reject_reason = RejectReason.NOT_THIS_UNIVERSITY
+        photo.reject_detail = (
+            "Ничто не связывает фото с этим вузом: найдено только по геопоиску, "
+            f"названия вуза нет ни в имени файла, ни в подписи, ни в категориях "
+            f"(балл {score:.2f})"
+        )
+
     if photo.reject_reason is None and score < REVIEW_THRESHOLD:
-        # Разделяем «слабые улики вообще» и «скорее всего это другой вуз»:
-        # жюри должно видеть внятную причину, а не общее «низкий балл».
+        # Разделяем «слабые улики вообще» и «скорее всего это другой вуз».
         wrong_university = not mentions and not (
             SourceKind.COMMONS_CATEGORY in photo.source_kinds
             or SourceKind.COMMONS_SEARCH in photo.source_kinds
