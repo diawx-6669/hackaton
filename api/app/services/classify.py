@@ -42,6 +42,12 @@ CATEGORY_TERMS: dict[PhotoCategory, tuple[str, ...]] = {
         "concert", "conference", "club", "volunteer", "студент", "студенч",
         "выпускн", "праздн", "фестивал", "конкурс", "церемон", "оқушы",
     ),
+    PhotoCategory.FOOD: (
+        "canteen", "cafeteria", "dining hall", "dining room", "refectory",
+        "mess hall", "buffet", "food court", "kitchen", "laundry",
+        "столов", "буфет", "кафетер", "кухн", "прачечн", "асхана", "ас үй",
+        "пункт питания", "фудкорт",
+    ),
     PhotoCategory.CAMPUS: (
         "campus", "building", "faculty", "entrance", "courtyard", "facade",
         "block", "hall", "кампус", "корпус", "здание", "факультет", "вход",
@@ -73,6 +79,7 @@ PRIORITY: tuple[PhotoCategory, ...] = (
     PhotoCategory.LABS,
     PhotoCategory.SPORTS,
     PhotoCategory.CLASSROOMS,
+    PhotoCategory.FOOD,
     PhotoCategory.STUDENT_LIFE,
     PhotoCategory.CAMPUS,
     PhotoCategory.CITY,

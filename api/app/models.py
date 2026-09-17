@@ -61,6 +61,8 @@ class PhotoCategory(str, Enum):
     LABS = "labs"
     SPORTS = "sports"
     STUDENT_LIFE = "student_life"
+    # Столовые, буфеты, кухни, прачечные — быт, о котором спрашивают чаще всего.
+    FOOD = "food"
     CITY = "city"
     JUNK = "junk"
     UNKNOWN = "unknown"
@@ -224,6 +226,48 @@ class Surroundings(BaseModel):
     error: Optional[str] = None
 
 
+class CostQuote(BaseModel):
+    """Дословная строка с ценой с сайта вуза. Не пересчитана и не усреднена."""
+
+    topic: str
+    topic_title: str
+    quote: str
+    page_title: str
+    url: str
+
+
+class Costs(BaseModel):
+    """Стоимость — только цитаты из официального источника (см. services/costs.py)."""
+
+    quotes: list[CostQuote] = Field(default_factory=list)
+    available: bool = False
+    note: Optional[str] = None
+
+
+class EventGroup(BaseModel):
+    """Событие вуза, собранное из уже найденных фото — не из расписания."""
+
+    title: str
+    photo_ids: list[str] = Field(default_factory=list)
+    count: int = 0
+    years: list[int] = Field(
+        default_factory=list, description="Годы съёмки; у файлов без даты года нет"
+    )
+
+
+class CampusVideo(BaseModel):
+    """Видео с Wikimedia Commons. Сторонние площадки не трогаем: это их правила."""
+
+    id: str
+    title: str
+    url: str
+    source_page_url: str
+    author: Optional[str] = None
+    license: Optional[str] = None
+    duration_s: Optional[int] = None
+    mime: str
+
+
 class DistrictInfo(BaseModel):
     """Инфраструктура района по OSM.
 
@@ -288,6 +332,9 @@ class Profile(BaseModel):
     )
     surroundings: Optional[Surroundings] = None
     district: Optional[DistrictInfo] = None
+    events: list[EventGroup] = Field(default_factory=list)
+    videos: list[CampusVideo] = Field(default_factory=list)
+    costs: Optional[Costs] = None
     logistics: Optional[Logistics] = None
 
 

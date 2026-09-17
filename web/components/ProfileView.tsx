@@ -5,7 +5,9 @@ import { useMemo, useState } from "react";
 import { CampusSummary } from "./CampusSummary";
 import { Lightbox } from "./Lightbox";
 import { PhotoCard } from "./PhotoCard";
+import { CostsBlock } from "./Costs";
 import { DistrictBlock } from "./District";
+import { EventsBlock } from "./Events";
 import { SurroundingsBlock } from "./Surroundings";
 import {
   CATEGORY_LABELS,
@@ -50,6 +52,7 @@ const FILTERS: PhotoCategory[] = [
   "labs",
   "sports",
   "student_life",
+  "food",
   "city",
 ];
 
@@ -161,6 +164,15 @@ export function ProfileView({ profile }: { profile: Profile }) {
       {profile.surroundings && <SurroundingsBlock data={profile.surroundings} />}
 
       <DistrictBlock district={profile.district} logistics={profile.logistics} />
+
+      {profile.costs && <CostsBlock data={profile.costs} />}
+
+      <EventsBlock
+        events={profile.events ?? []}
+        videos={profile.videos ?? []}
+        photos={[...profile.verified, ...profile.needs_review]}
+        onOpen={setLightbox}
+      />
 
       {profile.description && <CampusSummary description={profile.description} />}
       {!profile.description && profile.partial && (

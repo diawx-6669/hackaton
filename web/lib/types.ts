@@ -55,6 +55,7 @@ export type PhotoCategory =
   | "labs"
   | "sports"
   | "student_life"
+  | "food"
   | "city"
   | "junk"
   | "unknown";
@@ -124,6 +125,41 @@ export type Profile = {
   surroundings?: Surroundings | null;
   district?: DistrictInfo | null;
   logistics?: Logistics | null;
+  events?: EventGroup[];
+  videos?: CampusVideo[];
+  costs?: Costs | null;
+};
+
+export type CostQuote = {
+  topic: string;
+  topic_title: string;
+  quote: string;
+  page_title: string;
+  url: string;
+};
+
+export type Costs = {
+  quotes: CostQuote[];
+  available: boolean;
+  note?: string | null;
+};
+
+export type EventGroup = {
+  title: string;
+  photo_ids: string[];
+  count: number;
+  years: number[];
+};
+
+export type CampusVideo = {
+  id: string;
+  title: string;
+  url: string;
+  source_page_url: string;
+  author?: string | null;
+  license?: string | null;
+  duration_s?: number | null;
+  mime: string;
 };
 
 export type DistrictInfo = {
@@ -210,6 +246,7 @@ export const CATEGORY_LABELS: Record<PhotoCategory, string> = {
   labs: "Лаборатории",
   sports: "Спорт",
   student_life: "Студенческая жизнь",
+  food: "Питание и быт",
   city: "Город",
   junk: "Мусор",
   unknown: "Без категории",

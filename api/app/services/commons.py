@@ -6,6 +6,7 @@ import html
 import logging
 import re
 from typing import Any, Iterable, Optional
+from urllib.parse import quote
 
 from app.config import get_settings
 from app.models import Coordinates, Photo, RejectReason, SourceKind
@@ -369,4 +370,44 @@ def unique_titles(items: Iterable[str]) -> list[str]:
         if i not in seen:
             seen.add(i)
             out.append(i)
+    return out
+
+
+# Commons хранит видео в свободных форматах (webm, ogv). Их немного, и это
+# честная причина: там, где у вуза видео нет, вкладка так и скажет.
+_VIDEO_EXT = (".webm", ".ogv", ".ogg", ".mp4", ".mov")
+
+
+async def category_videos(category: str, limit: int = 12) -> list[dict[str, Any]]:
+    """Видеофайлы из категории вуза. Пустой список — значит на Commons их нет."""
+    titles = await category_files(category, limit=limit * 6)
+    candidates = [t for t in titles if t.lower().endswith(_VIDEO_EXT)]
+    if not candidates:
+        return []
+
+    pages = await image_info(candidates[: limit * 2])
+    out: list[dict[str, Any]] = []
+    for title, page in pages.items():
+        info = (page.get("imageinfo") or [{}])[0]
+        mime = info.get("mime") or ""
+        if not mime.startswith("video/"):
+            continue
+        url = info.get("url")
+        if not url:
+            continue
+        out.append(
+            {
+                "id": file_id(title),
+                "title": title.removeprefix("File:"),
+                "url": url,
+                "source_page_url": info.get("descriptionurl")
+                or f"https://commons.wikimedia.org/wiki/{quote(title.replace(' ', '_'))}",
+                "author": _extmeta(page, "Artist") or info.get("user"),
+                "license": _extmeta(page, "LicenseShortName") or _extmeta(page, "UsageTerms"),
+                "duration_s": int(float(info["duration"])) if info.get("duration") else None,
+                "mime": mime,
+            }
+        )
+        if len(out) >= limit:
+            break
     return out

@@ -14,9 +14,12 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 from app.config import get_settings
 from app.models import (
     CampusDescription,
+    CampusVideo,
     CategoryBucket,
+    Costs,
     Coordinates,
     DistrictInfo,
+    EventGroup,
     Logistics,
     Photo,
     PhotoCategory,
@@ -30,8 +33,10 @@ from app.models import (
 )
 from app.services import (
     commons,
+    costs as costs_service,
     dedup,
     describe,
+    events as events_service,
     evidence,
     officialsite,
     osm,
@@ -51,6 +56,7 @@ GALLERY_CATEGORIES = [
     PhotoCategory.LABS,
     PhotoCategory.SPORTS,
     PhotoCategory.STUDENT_LIFE,
+    PhotoCategory.FOOD,
     PhotoCategory.CITY,
 ]
 
@@ -310,6 +316,12 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
         osm_task = asyncio.create_task(osm.fetch_surroundings(uni.coordinates))
         district_task = asyncio.create_task(osm.fetch_district(uni.coordinates))
 
+    # Видео с Commons: отдельный запрос, потому что обычный конвейер их
+    # отбраковывает — у видео mime не image/*, и это правильно для галереи.
+    video_task: asyncio.Task[list[dict[str, Any]]] | None = None
+    if uni.commons_category:
+        video_task = asyncio.create_task(commons.category_videos(uni.commons_category))
+
     collected: list[Photo] = []
     pending = set(tasks)
     while pending:
@@ -466,6 +478,8 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
         surroundings: Surroundings | None = None,
         district: DistrictInfo | None = None,
         logistics: Logistics | None = None,
+        videos: list[CampusVideo] | None = None,
+        costs: Costs | None = None,
     ) -> Profile:
         return Profile(
             university=uni,
@@ -489,6 +503,9 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
             surroundings=surroundings,
             district=district,
             logistics=logistics,
+            events=events_service.build_events([*verified, *needs_review]),
+            videos=videos or [],
+            costs=costs,
         )
 
     # Фото готовы — отдаём их немедленно, не дожидаясь LLM (п.7 ТЗ:
@@ -503,20 +520,20 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
     )
 
     # --- описание кампуса (шаг 6 ТЗ) ---
+    # Текст с сайта вуза — страницы уже скачаны сборщиком фотографий, поэтому
+    # второй раз в сеть не идём: обход закеширован. Нужен и описанию, и ценам.
+    site_texts: list[SiteText] = []
+    if site_task is not None:
+        try:
+            site_texts = await asyncio.wait_for(
+                asyncio.shield(site_task),
+                timeout=max(0.5, min(3.0, clock.remaining(settings.total_timeout))),
+            )
+        except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+            site_texts = []
+
     description: CampusDescription | None = None
     if verified or needs_review:
-        # Текст с сайта вуза — страницы уже скачаны сборщиком фотографий,
-        # поэтому второй раз в сеть не идём: обход закеширован.
-        site_texts: list[SiteText] = []
-        if site_task is not None:
-            try:
-                site_texts = await asyncio.wait_for(
-                    asyncio.shield(site_task),
-                    timeout=max(0.5, min(3.0, clock.remaining(settings.total_timeout))),
-                )
-            except (asyncio.TimeoutError, Exception):  # noqa: BLE001
-                site_texts = []
-
         try:
             result = await asyncio.wait_for(
                 describe.describe(uni, verified or needs_review, site_texts),
@@ -601,12 +618,25 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
         except (asyncio.TimeoutError, Exception):  # noqa: BLE001
             warnings.append("OSRM не ответил — время в пути не посчитано")
 
+    videos: list[CampusVideo] = []
+    if video_task is not None:
+        try:
+            raw = await asyncio.wait_for(
+                asyncio.shield(video_task),
+                timeout=max(0.5, min(3.0, clock.remaining(settings.total_timeout))),
+            )
+            videos = [CampusVideo(**item) for item in raw]
+        except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+            video_task.cancel()
+
     profile = assemble(
         description,
         partial=False,
         surroundings=surroundings,
         district=district,
         logistics=logistics,
+        videos=videos,
+        costs=costs_service.extract_costs(site_texts),
     )
 
     yield StageEvent(
