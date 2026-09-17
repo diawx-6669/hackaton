@@ -5,7 +5,7 @@ import asyncio
 import logging
 import re
 from typing import Any, Optional
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from app.config import get_settings
 from app.models import Coordinates, University
@@ -132,6 +132,168 @@ async def search_entities(query: str, limit: int = 12) -> dict[str, dict[str, An
     return merged
 
 
+# Классы, по которым Action API может понять, что это вуз. SPARQL проверяет
+# P31/P279* транзитивно, Action API так не умеет — поэтому здесь плоский
+# список самых частых значений P31. Не нашли совпадения — НЕ пишем is_edu=False,
+# а оставляем None: пусть решает текстовая подстраховка, а не догадка.
+_EDU_CLASSES = {
+    "Q3918",  # университет
+    "Q875538",  # публичный университет
+    "Q902104",  # частный университет
+    "Q3354859",  # коллегиальный университет
+    "Q1371037",  # технический университет
+    "Q189004",  # колледж
+    "Q1664720",  # институт
+    "Q2385804",  # образовательное учреждение
+    "Q4671277",  # академическое учреждение
+    "Q38723",  # высшее учебное заведение
+    "Q62078547",  # общественный исследовательский университет
+    "Q15936437",  # исследовательский университет
+    "Q23002054",  # частное некоммерческое учебное заведение
+}
+
+# Свойства, которые вытаскиваем из claims Action API.
+_CLAIM_MAP = {
+    "P625": "coord",
+    "P856": "website",
+    "P373": "commons_category",
+    "P154": "logo",
+    "P571": "inception",
+}
+
+
+def _claim_values(entity: dict[str, Any], prop: str) -> list[Any]:
+    out = []
+    for claim in entity.get("claims", {}).get(prop, []):
+        snak = claim.get("mainsnak", {})
+        if snak.get("snaktype") != "value":
+            continue
+        value = snak.get("datavalue", {}).get("value")
+        if value is not None:
+            out.append(value)
+    return out
+
+
+def _entity_label(entity: dict[str, Any], key: str = "labels") -> dict[str, str]:
+    return {lang: v.get("value", "") for lang, v in (entity.get(key) or {}).items()}
+
+
+async def _wbgetentities(qids: list[str], props: str) -> dict[str, dict[str, Any]]:
+    s = get_settings()
+    out: dict[str, dict[str, Any]] = {}
+    # Action API принимает не больше 50 идентификаторов за запрос.
+    for i in range(0, len(qids), 50):
+        chunk = qids[i : i + 50]
+        data = await get_json(
+            s.wikidata_api,
+            {
+                "action": "wbgetentities",
+                "ids": "|".join(chunk),
+                "props": props,
+                "languages": "ru|en|kk",
+                "format": "json",
+                "origin": "*",
+            },
+        )
+        out.update(data.get("entities") or {})
+    return out
+
+
+async def _fetch_details_action(qids: list[str]) -> dict[str, dict[str, Any]]:
+    """Запасной путь, когда SPARQL недоступен (403, лимиты, таймаут).
+
+    Action API отдаёт те же P625/P856/P373/P17/P131/P154/P571, только без
+    транзитивной проверки типа и с QID вместо названий города и страны —
+    за ними идём вторым запросом. Данных чуть меньше, но профиль собирается:
+    падение одного источника не должно ронять весь ответ (п.2 ТЗ).
+    """
+    entities = await _wbgetentities(qids, "labels|descriptions|aliases|claims")
+
+    out: dict[str, dict[str, Any]] = {}
+    linked: set[str] = set()  # QID города и страны — за их названиями сходим отдельно
+    for qid, entity in entities.items():
+        if entity.get("missing") is not None:
+            continue
+        rec: dict[str, Any] = {}
+        labels = _entity_label(entity)
+        descriptions = _entity_label(entity, "descriptions")
+        label = labels.get("ru") or labels.get("en") or labels.get("kk")
+        if label:
+            rec["label"] = label
+        if labels.get("en"):
+            rec["en_label"] = labels["en"]
+        description = descriptions.get("ru") or descriptions.get("en")
+        if description:
+            rec["description"] = description
+
+        aliases: list[str] = []
+        for lang_aliases in (entity.get("aliases") or {}).values():
+            for a in lang_aliases:
+                value = a.get("value")
+                if value and value not in aliases:
+                    aliases.append(value)
+        if aliases:
+            rec["aliases"] = aliases
+
+        for prop, key in _CLAIM_MAP.items():
+            values = _claim_values(entity, prop)
+            if not values:
+                continue
+            value = values[0]
+            if key == "coord" and isinstance(value, dict):
+                # Приводим к тому же виду, что отдаёт SPARQL: Point(lon lat).
+                rec["coord"] = f"Point({value['longitude']} {value['latitude']})"
+            elif key == "inception" and isinstance(value, dict):
+                rec["inception"] = str(value.get("time", "")).lstrip("+")
+            elif key == "logo" and isinstance(value, str):
+                rec["logo"] = (
+                    "https://commons.wikimedia.org/wiki/Special:FilePath/"
+                    + quote(value.replace(" ", "_"))
+                )
+            elif isinstance(value, str):
+                rec[key] = value
+
+        for prop, key in (("P131", "city"), ("P17", "country")):
+            values = _claim_values(entity, prop)
+            if values and isinstance(values[0], dict) and values[0].get("id"):
+                rec[f"{key}_qid"] = values[0]["id"]
+                linked.add(values[0]["id"])
+
+        types = {
+            v["id"]
+            for v in _claim_values(entity, "P31")
+            if isinstance(v, dict) and v.get("id")
+        }
+        if types & _EDU_CLASSES:
+            rec["is_edu"] = True
+
+        out[qid] = rec
+
+    # Названия города и страны + координаты города (если у вуза нет своих).
+    if linked:
+        try:
+            places = await _wbgetentities(sorted(linked), "labels|claims")
+        except Exception as exc:  # noqa: BLE001 — без названий профиль всё равно жив
+            log.warning("wbgetentities places failed: %s", exc)
+            places = {}
+        for rec in out.values():
+            for key in ("city", "country"):
+                place = places.get(rec.pop(f"{key}_qid", "") or "")
+                if not place or place.get("missing") is not None:
+                    continue
+                labels = _entity_label(place)
+                name = labels.get("ru") or labels.get("en") or labels.get("kk")
+                if name:
+                    rec[key] = name
+                if key == "city" and not rec.get("city_coord"):
+                    coords = _claim_values(place, "P625")
+                    if coords and isinstance(coords[0], dict):
+                        rec["city_coord"] = (
+                            f"Point({coords[0]['longitude']} {coords[0]['latitude']})"
+                        )
+    return out
+
+
 async def fetch_details(qids: list[str]) -> dict[str, dict[str, Any]]:
     """Добираем координаты/сайт/город/категорию Commons одним SPARQL-запросом."""
     if not qids:
@@ -146,8 +308,12 @@ async def fetch_details(qids: list[str]) -> dict[str, dict[str, Any]]:
             headers={"Accept": "application/sparql-results+json"},
         )
     except Exception as exc:
-        log.warning("SPARQL details failed: %s", exc)
-        return {}
+        log.warning("SPARQL details failed: %s — пробуем Action API", exc)
+        try:
+            return await _fetch_details_action(qids)
+        except Exception as fallback_exc:  # noqa: BLE001
+            log.warning("wbgetentities fallback failed: %s", fallback_exc)
+            return {}
 
     out: dict[str, dict[str, Any]] = {}
     for row in data.get("results", {}).get("bindings", []):
