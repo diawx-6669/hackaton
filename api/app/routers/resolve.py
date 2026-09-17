@@ -5,6 +5,7 @@ import time
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.deps import AuthedUser
 from app.models import ResolveResponse
 from app.services import wikidata
 
@@ -13,6 +14,7 @@ router = APIRouter(tags=["resolve"])
 
 @router.get("/resolve", response_model=ResolveResponse)
 async def resolve_university(
+    user: AuthedUser,
     q: str = Query(..., min_length=2, max_length=200, description="Название вуза"),
     limit: int = Query(8, ge=1, le=20),
 ) -> ResolveResponse:

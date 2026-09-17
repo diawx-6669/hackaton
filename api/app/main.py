@@ -13,7 +13,7 @@ from app.routers import auth, compare, profile, resolve, subscribe, uploads
 from app.services.cache import get_cache
 from app.services.http import close_client
 
-VERSION = "0.8.0"
+VERSION = "0.9.0"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,6 +31,11 @@ def _check_deployment_config(settings) -> None:
             "CAMPUSLENS_USER_AGENT не задан. Wikimedia режет анонимные запросы (429) — "
             "укажите контактный User-Agent в переменных окружения."
         )
+    if settings.require_auth and not settings.demo_account:
+        log.warning(
+            "Вход обязателен, но демо-аккаунт не задан. Жюри придётся регистрироваться: "
+            "задайте CAMPUSLENS_DEMO_ACCOUNT в формате почта:пароль."
+        )
     if not settings.auth_secret:
         log.warning(
             "CAMPUSLENS_AUTH_SECRET не задан — после перезапуска сервиса все "
@@ -44,9 +49,29 @@ def _check_deployment_config(settings) -> None:
         )
 
 
+async def _ensure_demo_account(settings) -> None:
+    """Демо-аккаунт для жюри: сайт закрыт входом, а регистрироваться им незачем."""
+    if not settings.demo_account or ":" not in settings.demo_account:
+        return
+
+    email, _, password = settings.demo_account.partition(":")
+    from app.routers.auth import _store
+    from app.services.auth import AuthError
+
+    try:
+        await _store().register(email, password, "Демо")
+        log.info("демо-аккаунт создан: %s", email)
+    except AuthError:
+        pass  # уже существует — это нормально
+    except OSError as exc:
+        log.warning("демо-аккаунт не создан: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    _check_deployment_config(get_settings())
+    settings = get_settings()
+    _check_deployment_config(settings)
+    await _ensure_demo_account(settings)
     yield
     await close_client()
 

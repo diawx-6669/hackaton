@@ -8,6 +8,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Query, Request
 from sse_starlette.sse import EventSourceResponse
 
+from app.deps import AuthedUser
 from app.models import Profile, Stage
 from app.pipeline import build_profile, stream_profile
 
@@ -23,6 +24,7 @@ def _validate(q: str | None, id: str | None) -> None:
 @router.get("/profile")
 async def profile_stream(
     request: Request,
+    user: AuthedUser,
     q: str | None = Query(None, min_length=2, max_length=200),
     id: str | None = Query(None, pattern=r"^Q\d+$", description="Wikidata QID, если вуз уже выбран"),
     qid: str | None = Query(None, pattern=r"^Q\d+$", description="Синоним id (как в ТЗ)"),
@@ -57,6 +59,7 @@ async def profile_stream(
 
 @router.get("/profile.json", response_model=Profile)
 async def profile_json(
+    user: AuthedUser,
     q: str | None = Query(None, min_length=2, max_length=200),
     id: str | None = Query(None, pattern=r"^Q\d+$"),
     qid: str | None = Query(None, pattern=r"^Q\d+$"),

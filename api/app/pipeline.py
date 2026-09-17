@@ -280,6 +280,12 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
     for name, fn in collectors:
         tasks[asyncio.create_task(fn())] = name
 
+    # Текст с сайта вуза нужен только под конец, но качать его тогда же —
+    # значит добавить секунды в самый конец. Запускаем сразу, заберём готовым.
+    site_task: asyncio.Task[list[SiteText]] | None = None
+    if uni.website:
+        site_task = asyncio.create_task(officialsite.collect_texts(uni.website))
+
     collected: list[Photo] = []
     pending = set(tasks)
     while pending:
@@ -307,6 +313,9 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
                 counts={"found_total": len(collected), "from_source": len(photos)},
             )
 
+    if site_task is not None and site_task.done() and site_task.exception():
+        site_task.exception()  # забираем исключение, чтобы asyncio не ругался
+
     if pending:
         for task in pending:
             task.cancel()
@@ -323,23 +332,11 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
         counts={"found": len(collected)},
     )
 
-    # --- дедупликация ---
-    try:
-        unique, duplicates = await asyncio.wait_for(
-            dedup.dedupe(collected), timeout=max(2.0, clock.remaining(settings.total_timeout))
-        )
-    except asyncio.TimeoutError:
-        # Перцептивная дедупликация качает миниатюры и может не успеть.
-        # Лучше отдать профиль с точной дедупликацией, чем не отдать ничего.
-        unique, duplicates = dedup.exact_dedupe(collected)
-        warnings.append("pHash-дедупликация не уложилась в бюджет — схлопнуты только одинаковые файлы")
-
-    yield StageEvent(
-        stage=Stage.DEDUPED,
-        message=f"Дубли удалены: −{len(duplicates)}",
-        elapsed_ms=clock.elapsed_ms,
-        counts={"unique": len(unique), "duplicates": len(duplicates)},
-    )
+    # --- точная дедупликация ---
+    # Перцептивная идёт ПОСЛЕ отсева: качать миниатюры того, что всё равно
+    # выбросим (логотипы, стоки, чужие здания), — трата самой дорогой части
+    # бюджета. Обычно это срезает больше половины загрузок.
+    unique, duplicates = dedup.exact_dedupe(collected)
 
     # --- классификация по категориям ---
     for photo in unique:
@@ -380,6 +377,40 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
         else:
             rejected.append(photo)
 
+    # --- перцептивная дедупликация только среди прошедших отбор ---
+    survivors = [*verified, *needs_review]
+    perceptual: list[Photo] = []
+    if survivors:
+        try:
+            kept, perceptual = await asyncio.wait_for(
+                dedup.perceptual_dedupe(survivors),
+                timeout=max(2.0, clock.remaining(settings.total_timeout) - 3.0),
+            )
+        except asyncio.TimeoutError:
+            kept = survivors
+            warnings.append(
+                "pHash-дедупликация не уложилась в бюджет — схлопнуты только одинаковые файлы"
+            )
+
+        # Схлопнутый дубль мог принести своему представителю ещё один источник,
+        # а это улика. Пересчитываем балл только у таких — это чистый CPU.
+        for photo in kept:
+            if photo.evidence.source_count != len(photo.source_kinds):
+                evidence.score_photo(photo, uni.coordinates, uni.website, names)
+
+        verified = [p for p in kept if evidence.bucket(p) == "verified"]
+        needs_review = [p for p in kept if evidence.bucket(p) == "needs_review"]
+        rejected.extend(perceptual)
+
+    duplicates = [*duplicates, *perceptual]
+
+    yield StageEvent(
+        stage=Stage.DEDUPED,
+        message=f"Дубли удалены: −{len(duplicates)}",
+        elapsed_ms=clock.elapsed_ms,
+        counts={"unique": len(unique), "duplicates": len(duplicates)},
+    )
+
     verified.sort(key=lambda p: p.confidence, reverse=True)
     needs_review.sort(key=lambda p: p.confidence, reverse=True)
 
@@ -410,11 +441,11 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
         # Текст с сайта вуза — страницы уже скачаны сборщиком фотографий,
         # поэтому второй раз в сеть не идём: обход закеширован.
         site_texts: list[SiteText] = []
-        if uni.website:
+        if site_task is not None:
             try:
                 site_texts = await asyncio.wait_for(
-                    officialsite.collect_texts(uni.website),
-                    timeout=max(1.0, min(6.0, clock.remaining(settings.total_timeout))),
+                    asyncio.shield(site_task),
+                    timeout=max(0.5, min(3.0, clock.remaining(settings.total_timeout))),
                 )
             except (asyncio.TimeoutError, Exception):  # noqa: BLE001
                 site_texts = []

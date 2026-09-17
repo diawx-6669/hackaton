@@ -9,7 +9,10 @@ export async function resolveUniversity(
   q: string,
   signal?: AbortSignal,
 ): Promise<ResolveResponse> {
-  const res = await fetch(`${API_BASE}/api/resolve?q=${encodeURIComponent(q)}`, { signal });
+  const res = await fetch(`${API_BASE}/api/resolve?q=${encodeURIComponent(q)}`, {
+    signal,
+    headers: authHeaders(),
+  });
   if (!res.ok) {
     throw new Error(`Поиск не удался (${res.status})`);
   }
@@ -31,7 +34,7 @@ export async function streamProfile(
 
   const res = await fetch(`${API_BASE}/api/profile?${query.toString()}`, {
     signal,
-    headers: { Accept: "text/event-stream" },
+    headers: { Accept: "text/event-stream", ...authHeaders() },
   });
   if (!res.ok || !res.body) {
     throw new Error(`Стрим недоступен (${res.status})`);
@@ -75,7 +78,7 @@ export async function compareUniversities(
   signal?: AbortSignal,
 ): Promise<Comparison> {
   const params = new URLSearchParams({ a, b });
-  const res = await fetch(`${API_BASE}/api/compare?${params}`, { signal });
+  const res = await fetch(`${API_BASE}/api/compare?${params}`, { signal, headers: authHeaders() });
   if (!res.ok) {
     const detail = await res.json().catch(() => null);
     throw new Error(detail?.detail ?? `Сравнение не удалось (${res.status})`);

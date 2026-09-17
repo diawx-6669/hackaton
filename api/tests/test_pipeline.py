@@ -256,3 +256,31 @@ async def test_search_found_photo_is_not_rejected_as_wrong_university(full_mock)
         and "commons_search" in p["source_kinds"]
     ]
     assert not wrong, "найденное по названию вуза не может быть «не тем вузом»"
+
+
+async def test_phash_does_not_download_thumbnails_of_rejected_photos(full_mock, monkeypatch):
+    """Самая дорогая часть бюджета — скачивание миниатюр.
+
+    Логотипы, мелочь и файлы без лицензии отсеиваются раньше, поэтому
+    хешировать их незачем.
+    """
+    from app.services import phash
+
+    hashed: list[str] = []
+    original = phash.compute_hashes
+
+    async def counting(photos, limit=phash.MAX_DOWNLOADS):
+        hashed.extend(p.id for p in photos)
+        return await original(photos, limit)
+
+    monkeypatch.setattr(phash, "compute_hashes", counting)
+
+    events = await collect_events(qid=fixtures.QID)
+    profile = events[-1].payload
+
+    rejected_ids = {p["id"] for p in profile["rejected"] if p["reject_reason"] != "duplicate"}
+    assert rejected_ids, "в фикстурах есть отклонённые файлы"
+    assert not (rejected_ids & set(hashed)), "отклонённые файлы не должны качаться ради pHash"
+
+    shown_ids = {p["id"] for p in [*profile["verified"], *profile["needs_review"]]}
+    assert set(hashed) <= shown_ids, "качаем только то, что реально показываем"

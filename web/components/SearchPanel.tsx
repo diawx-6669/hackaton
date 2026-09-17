@@ -48,9 +48,7 @@ export function SearchPanel({ onSearch, busy, onCancel, compact = false }: Props
       {!compact && (
         <>
           <h2 className="font-display text-2xl font-semibold">Найдите свой университет</h2>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            Введите название — остальное соберём сами.
-          </p>
+
           <label className="mt-6 block text-xs font-medium" htmlFor="university">
             Университет
           </label>
@@ -111,11 +109,7 @@ export function SearchPanel({ onSearch, busy, onCancel, compact = false }: Props
         </button>
       )}
 
-      {!compact && (
-        <p className="mt-6 text-center text-[11px] text-[var(--muted)]">
-          Открытые данные · проверяемые источники
-        </p>
-      )}
+
     </form>
   );
 
@@ -159,10 +153,8 @@ export function SearchPanel({ onSearch, busy, onCancel, compact = false }: Props
         <div className="mt-6 min-h-[308px]">
           <h2 className="font-display text-2xl font-semibold">CampusLens</h2>
           <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
-            Сервис собирает фотографии кампуса из Wikidata и Wikimedia Commons, убирает дубли
-            и показывает, почему каждому снимку можно доверять: расстояние геотега до кампуса,
-            доверие к домену, привязка к вузу, свежесть. Если подтвердить не удалось — так
-            и пишем, а не додумываем.
+            Собираем фото кампуса из Wikidata и Wikimedia Commons, убираем дубли и показываем,
+            почему снимку можно доверять: геотег, домен, привязка к вузу, свежесть.
           </p>
           <div className="mt-6 grid grid-cols-2 gap-3">
             {FACTS.map((f) => (

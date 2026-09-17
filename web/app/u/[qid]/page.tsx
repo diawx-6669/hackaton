@@ -2,6 +2,7 @@
 
 import { use, useEffect } from "react";
 import Link from "next/link";
+import { AuthGate } from "@/components/AuthGate";
 import { Funnel } from "@/components/Funnel";
 import { ProfileView } from "@/components/ProfileView";
 import { useProfileRun } from "@/lib/useProfile";
@@ -40,8 +41,10 @@ export default function UniversityPage({ params }: { params: Promise<{ qid: stri
         </p>
       )}
 
-      <Funnel events={events} running={running} startedAt={startedAt} />
-      {profile && <ProfileView profile={profile} />}
+      <AuthGate>
+        <Funnel events={events} running={running} startedAt={startedAt} />
+        {profile && <ProfileView profile={profile} />}
+      </AuthGate>
     </main>
   );
 }

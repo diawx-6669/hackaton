@@ -26,11 +26,13 @@ DEFAULT_THRESHOLD = 6
 
 # Дальше картинки уже разные, а качать больше — тратить бюджет.
 MAX_DOWNLOADS = 120
-DOWNLOAD_CONCURRENCY = 16
-PER_IMAGE_TIMEOUT = 4.0
+DOWNLOAD_CONCURRENCY = 24
+PER_IMAGE_TIMEOUT = 3.0
 
 
-def _thumb_url(photo: Photo, width: int = 240) -> str:
+# pHash всё равно ужимает картинку до 32×32, поэтому 160 px хватает
+# с запасом, а трафика вдвое меньше, чем на 240 px.
+def _thumb_url(photo: Photo, width: int = 160) -> str:
     """Миниатюра Commons нужного размера, если её можно попросить."""
     url = photo.thumb_url or photo.url
     # Commons отдаёт произвольную ширину через сегмент /NNNpx- в имени.

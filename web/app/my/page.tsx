@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { myUploads, myWallet, uploadPhoto, uploadUrl } from "@/lib/api";
+import { AuthGate } from "@/components/AuthGate";
 import { useAuth } from "@/lib/auth";
 import type { UploadRecord, Wallet } from "@/lib/types";
 
@@ -72,24 +72,15 @@ export default function MyPhotosPage() {
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-8 sm:px-6 sm:py-10">
+      <AuthGate>
       <header>
         <h1 className="font-display text-2xl font-semibold sm:text-3xl">Мои фото</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">
           Учишься здесь? Сфотографируй место и загрузи — за каждый принятый снимок
           начисляются бонусы.
         </p>
-        {user ? (
-          <p className="mt-2 text-xs text-[var(--muted)]">
-            Аккаунт: <span className="text-[var(--foreground)]">{user.email}</span> — фото и бонусы
-            доступны с любого устройства.
-          </p>
-        ) : (
-          <p className="mt-2 text-xs text-[var(--warn)]">
-            Вы не вошли: фото привязаны к этому браузеру и пропадут при очистке данных.{" "}
-            <Link href="/login" className="text-[var(--accent)] underline">
-              Войти
-            </Link>
-          </p>
+        {user && (
+          <p className="mt-2 text-xs text-[var(--muted)]">{user.email}</p>
         )}
       </header>
 
@@ -165,8 +156,7 @@ export default function MyPhotosPage() {
         {error && <p className="text-sm text-[var(--bad)]">{error}</p>}
 
         <p className="text-[11px] leading-4 text-[var(--muted)]">
-          JPEG, PNG или WebP до 8 МБ, сторона от 480 px. Данные камеры и точные
-          координаты из файла удаляются при сохранении.
+          JPEG, PNG или WebP до 8 МБ. EXIF удаляется при сохранении.
         </p>
       </section>
 
@@ -206,32 +196,12 @@ export default function MyPhotosPage() {
         )}
       </section>
 
-      <footer className="card grid gap-1 p-4 text-xs leading-5 text-[var(--muted)]">
-        <p>
-          <b className="text-[var(--foreground)]">Эти снимки не попадают в проверенную галерею.</b>{" "}
-          У фотографии из открытого источника есть автор, лицензия и ссылка — у загруженной
-          нет ничего из этого. Поэтому она живёт отдельным разделом и не влияет на
-          достоверность профиля вуза.
-        </p>
-        {user ? (
-          <p>
-            Фото и бонусы привязаны к аккаунту и доступны с любого устройства. Учтите:
-            на бесплатном хостинге диск эфемерный, поэтому после передеплоя сервиса
-            и аккаунты, и загруженное исчезнут. От накрутки бонусы не защищены — это
-            демонстрация механики, а не рабочая программа лояльности.
-          </p>
-        ) : (
-          <p>
-            Вы не вошли, поэтому «свои» фото и бонусы привязаны к этому браузеру:
-            очистка данных обнулит историю.{" "}
-            <Link href="/login" className="text-[var(--accent)] underline">
-              Войдите
-            </Link>
-            , чтобы они были доступны с любого устройства. От накрутки бонусы не
-            защищены — это демонстрация механики, а не программа лояльности.
-          </p>
-        )}
+      <footer className="card p-4 text-xs leading-5 text-[var(--muted)]">
+        <b className="text-[var(--foreground)]">Эти снимки не попадают в проверенную галерею.</b>{" "}
+        У фото из открытого источника есть автор, лицензия и ссылка — у загруженного нет.
+        Поэтому оно живёт отдельно и не влияет на достоверность профиля вуза.
       </footer>
+      </AuthGate>
     </main>
   );
 }

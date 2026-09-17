@@ -17,6 +17,21 @@ COMMONS_API = "https://commons.wikimedia.org/w/api.php"
 
 
 @pytest.fixture(autouse=True)
+def _no_auth_by_default(monkeypatch):
+    """Большинство тестов про конвейер, а не про вход.
+
+    Требование входа проверяется отдельно в tests/test_auth_gate.py —
+    там фикстура включается обратно.
+    """
+    monkeypatch.setenv("CAMPUSLENS_REQUIRE_AUTH", "false")
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
 async def _reset_state():
     """Каждый тест стартует с чистым HTTP-клиентом и пустым кешем в памяти."""
     set_cache(TTLCache(directory=None))

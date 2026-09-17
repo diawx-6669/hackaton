@@ -100,7 +100,7 @@ export function SubscribeForm({ presetUniversity = "" }: { presetUniversity?: st
       </button>
 
       <p className="text-[11px] leading-4 text-[var(--muted)]">
-        Почта нужна только для этого отчёта. Рассылок и передачи третьим лицам нет.
+        Почта нужна только для отчёта. Рассылок нет.
       </p>
     </form>
   );

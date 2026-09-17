@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { AuthGate } from "@/components/AuthGate";
 import { CandidatePicker } from "@/components/CandidatePicker";
 import { Funnel } from "@/components/Funnel";
 import { ProfileView } from "@/components/ProfileView";
@@ -28,8 +29,8 @@ export default function Home() {
           </h1>
 
           <p className="mt-5 max-w-md text-sm leading-6 text-[var(--muted)] sm:text-base">
-            Визуальный профиль университета по реальным данным — вместо рекламных обещаний.
-            У каждого снимка есть источник, автор и лицензия.
+            Визуальный профиль университета по реальным данным. У каждого снимка —
+            источник, автор и лицензия.
           </p>
 
           {error && (
@@ -40,7 +41,9 @@ export default function Home() {
         </div>
 
         <div className="rise">
-          <SearchPanel busy={running} onSearch={(q) => run({ q })} onCancel={cancel} />
+          <AuthGate>
+            <SearchPanel busy={running} onSearch={(q) => run({ q })} onCancel={cancel} />
+          </AuthGate>
         </div>
       </main>
     );

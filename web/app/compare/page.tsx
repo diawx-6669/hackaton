@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
+import { AuthGate } from "@/components/AuthGate";
 import { PhotoCard } from "@/components/PhotoCard";
 import { compareUniversities } from "@/lib/api";
 import type { Comparison, Profile } from "@/lib/types";
@@ -68,13 +69,13 @@ export default function ComparePage() {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-8 sm:px-6 sm:py-10">
       <header>
-        <h1 className="text-2xl font-bold sm:text-3xl">Сравнение двух вузов</h1>
+        <h1 className="font-display text-2xl font-semibold sm:text-3xl">Сравнение вузов</h1>
         <p className="mt-2 max-w-2xl text-sm text-[var(--muted)]">
-          Оба профиля собираются параллельно, поэтому сравнение занимает примерно столько же,
-          сколько один профиль. Сравниваются только подтверждённые фото.
+          Сравниваются только подтверждённые фото.
         </p>
       </header>
 
+      <AuthGate>
       <form onSubmit={submit} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
         <input
           value={a}
@@ -101,7 +102,7 @@ export default function ComparePage() {
 
       {busy && (
         <p className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--muted)]">
-          Два профиля собираются одновременно — это до 30 секунд.
+          Собираем оба профиля…
         </p>
       )}
 
@@ -141,8 +142,8 @@ export default function ComparePage() {
               </tbody>
             </table>
             <p className="px-4 py-2 text-xs text-[var(--muted)]">
-              Сравнение собрано за {(result.took_ms / 1000).toFixed(1)} с. Зелёным — где показатель
-              выше; это про объём и качество найденных данных, а не оценка самого вуза.
+              Собрано за {(result.took_ms / 1000).toFixed(1)} с. Зелёным — где показатель выше:
+              это про объём найденных данных, а не оценка вуза.
             </p>
           </section>
 
@@ -152,6 +153,7 @@ export default function ComparePage() {
           </section>
         </>
       )}
+      </AuthGate>
     </main>
   );
 }

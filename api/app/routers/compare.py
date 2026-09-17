@@ -10,6 +10,7 @@ import time
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.deps import AuthedUser
 from app.models import Comparison, ComparisonRow, Profile
 from app.pipeline import build_profile
 
@@ -100,6 +101,7 @@ async def _one(q: str | None, qid: str | None, side: str) -> Profile:
 
 @router.get("/compare", response_model=Comparison)
 async def compare(
+    user: AuthedUser,
     a: str | None = Query(None, min_length=2, description="Название первого вуза"),
     b: str | None = Query(None, min_length=2, description="Название второго вуза"),
     a_id: str | None = Query(None, pattern=r"^Q\d+$"),
