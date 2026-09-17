@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { Sparkle } from "./Icons";
+import Image from "next/image";
 
 const MENU = [
   { href: "/", label: "Поиск" },
@@ -36,9 +36,14 @@ export function SiteHeader() {
     <header className="sticky top-0 z-40 border-b border-[var(--border-soft)] bg-[oklch(0.1_0.03_268_/_55%)] backdrop-blur-md">
       <nav className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:gap-4 sm:px-6">
         <Link href="/" className="flex shrink-0 items-center gap-2.5">
-          <span className="brand-mark grid size-8 place-items-center rounded-xl">
-            <Sparkle className="h-4 w-4" />
-          </span>
+          <Image
+            src="/logo.svg"
+            alt=""
+            width={36}
+            height={36}
+            priority
+            className="size-9 shrink-0"
+          />
           <span className="font-display whitespace-nowrap text-base font-semibold sm:text-xl">
             CampusLens
           </span>

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Unbounded } from "next/font/google";
 import { CosmicScene } from "@/components/CosmicScene";
+import { Intro } from "@/components/Intro";
 import { AuthProvider } from "@/lib/auth";
 import { SiteHeader } from "@/components/SiteHeader";
 import "./globals.css";
@@ -36,6 +37,13 @@ export const metadata: Metadata = {
     description:
       "Проверенный визуальный профиль кампуса по названию вуза: источники, лицензии, разбор достоверности.",
     type: "website",
+    images: ["/og.png"],
+  },
+  // app/icon.svg Next подхватывает сам; PNG нужен там, где SVG не берут —
+  // это домашний экран iOS и часть мессенджеров.
+  icons: {
+    icon: [{ url: "/logo.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180" }],
   },
 };
 
@@ -47,6 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body>
         <CosmicScene />
+        <Intro />
         <AuthProvider>
           <SiteHeader />
           {children}

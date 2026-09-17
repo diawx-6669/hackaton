@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img"
+     aria-label="CampusLens">
+  <title>CampusLens</title>
+  <defs>
+    <linearGradient id="blade0" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5eb8ff"/><stop offset="1" stop-color="#1f3bad"/>
+    </linearGradient>
+    <linearGradient id="blade1" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8b6bff"/><stop offset="1" stop-color="#2a1f8f"/>
+    </linearGradient>
+    <linearGradient id="blade2" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#3f7fe8"/><stop offset="1" stop-color="#151f6b"/>
+    </linearGradient>
+
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f2f7ff"/>
+      <stop offset="0.35" stop-color="#9fc4f0"/>
+      <stop offset="0.6" stop-color="#e8f2ff"/>
+      <stop offset="1" stop-color="#6f8fc9"/>
+    </linearGradient>
+    <linearGradient id="orbit" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#cfe6ff"/>
+      <stop offset="0.45" stop-color="#3d8bff"/>
+      <stop offset="1" stop-color="#9f7bff"/>
+    </linearGradient>
+    <radialGradient id="bead" cx="0.35" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.45" stop-color="#8fc4ff"/>
+      <stop offset="1" stop-color="#6b5bd8"/>
+    </radialGradient>
+    <clipPath id="lower"><rect x="-40" y="256" width="592" height="300"/></clipPath>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="0.45" stop-color="#8ec8ff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#8ec8ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- орбиты: два кольца крест-накрест, задняя половина -->
+  <g fill="none" stroke="url(#orbit)" stroke-width="14" stroke-linecap="round">
+    <ellipse cx="256" cy="256" rx="246" ry="96" transform="rotate(-27 256 256)"/>
+    <ellipse cx="256" cy="256" rx="246" ry="96" transform="rotate(27 256 256)"/>
+  </g>
+
+  <!-- корпус объектива -->
+  <circle cx="256" cy="256" r="182" fill="#0d1734"/>
+  <circle cx="256" cy="256" r="182" fill="none" stroke="url(#steel)" stroke-width="16"/>
+  <circle cx="256" cy="256" r="160" fill="none" stroke="url(#steel)" stroke-width="9"
+          opacity="0.75"/>
+  <circle cx="256" cy="256" r="151" fill="#101c42"/>
+
+  <!-- лепестки диафрагмы -->
+  <g>
+    <path d="M 256.00 106.00 A 150.00 150.00 0 0 1 388.44 185.58 Q 338.23 249.38 283.41 268.20 A 30.00 30.00 0 0 0 279.64 237.53 Q 288.76 180.29 256.00 106.00 Z" fill="url(#blade0)" stroke="#0b1533" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M 385.90 181.00 A 150.00 150.00 0 0 1 383.21 335.49 Q 302.85 323.91 259.14 285.84 A 30.00 30.00 0 0 0 283.82 267.24 Q 337.95 246.52 385.90 181.00 Z" fill="url(#blade1)" stroke="#0b1533" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M 385.90 331.00 A 150.00 150.00 0 0 1 250.77 405.91 Q 220.61 330.53 231.73 273.63 A 30.00 30.00 0 0 0 260.18 285.71 Q 305.19 322.23 385.90 331.00 Z" fill="url(#blade2)" stroke="#0b1533" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M 256.00 406.00 A 150.00 150.00 0 0 1 123.56 326.42 Q 173.77 262.62 228.59 243.80 A 30.00 30.00 0 0 0 232.36 274.47 Q 223.24 331.71 256.00 406.00 Z" fill="url(#blade0)" stroke="#0b1533" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M 126.10 331.00 A 150.00 150.00 0 0 1 128.79 176.51 Q 209.15 188.09 252.86 226.16 A 30.00 30.00 0 0 0 228.18 244.76 Q 174.05 265.48 126.10 331.00 Z" fill="url(#blade1)" stroke="#0b1533" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M 126.10 181.00 A 150.00 150.00 0 0 1 261.23 106.09 Q 291.39 181.47 280.27 238.37 A 30.00 30.00 0 0 0 251.82 226.29 Q 206.81 189.77 126.10 181.00 Z" fill="url(#blade2)" stroke="#0b1533" stroke-width="1.5" stroke-linejoin="round"/>
+  </g>
+
+  <!-- блик и звезда в центре -->
+  <circle cx="256" cy="256" r="74" fill="url(#glow)"/>
+  <path d="M256 196 L266 246 L316 256 L266 266 L256 316 L246 266 L196 256 L246 246 Z"
+        fill="#ffffff" opacity="0.98"/>
+
+  <!-- те же кольца поверх объектива, но половинками: кольцо уходит за корпус
+       и возвращается перед ним. Клип в повёрнутой системе координат, поэтому
+       передняя половина точно совпадает с задней — стыков не видно. -->
+  <g fill="none" stroke="url(#orbit)" stroke-width="14" stroke-linecap="round">
+    <g transform="rotate(-27 256 256)" clip-path="url(#lower)">
+      <ellipse cx="256" cy="256" rx="246" ry="96"/>
+    </g>
+    <g transform="rotate(27 256 256)" clip-path="url(#lower)">
+      <ellipse cx="256" cy="256" rx="246" ry="96"/>
+    </g>
+  </g>
+
+  <!-- шарики на орбите -->
+  <circle cx="470" cy="146" r="27" fill="url(#bead)"/>
+  <circle cx="42" cy="366" r="27" fill="url(#bead)"/>
+</svg>

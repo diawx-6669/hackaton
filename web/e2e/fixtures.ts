@@ -237,5 +237,7 @@ export async function mockApi(page: Page, options: MockOptions = {}) {
 export async function signIn(page: Page) {
   await page.addInitScript(() => {
     window.localStorage.setItem("campuslens-token", "test-token");
+    // Заставка проверяется отдельно (e2e/intro.spec.ts) и здесь только мешала бы.
+    window.localStorage.setItem("campuslens-intro-seen", "1");
   });
 }
