@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
@@ -13,20 +13,37 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [slow, setSlow] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const slowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Бесплатный Render засыпает после простоя: первый запрос может идти
+  // почти минуту. Без подсказки кнопка выглядит сломанной.
+  useEffect(() => () => {
+    if (slowTimer.current) clearTimeout(slowTimer.current);
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+    setSlow(false);
     setError(null);
+    slowTimer.current = setTimeout(() => setSlow(true), 2500);
     try {
       if (mode === "login") await login(email.trim(), password);
       else await register(email.trim(), password, name.trim());
       router.push("/my");
     } catch (err) {
-      setError((err as Error).message);
+      const message = (err as Error).message;
+      setError(
+        message === "Failed to fetch"
+          ? "Сервер не отвечает. Если он спал, подождите минуту и попробуйте снова."
+          : message,
+      );
     } finally {
+      if (slowTimer.current) clearTimeout(slowTimer.current);
       setBusy(false);
+      setSlow(false);
     }
   }
 
@@ -124,6 +141,12 @@ export default function LoginPage() {
           >
             {busy ? "Отправляем…" : mode === "login" ? "Войти" : "Зарегистрироваться"}
           </button>
+
+          {slow && (
+            <p className="text-xs text-[var(--muted)]">
+              Бесплатный сервер просыпается после простоя — это занимает до минуты.
+            </p>
+          )}
 
           <p className="text-[11px] leading-4 text-[var(--muted)]">
             Пароль хранится только в виде хеша. Это учебный проект — не используйте
