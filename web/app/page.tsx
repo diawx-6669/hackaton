@@ -42,7 +42,12 @@ export default function Home() {
 
         <div className="rise">
           <AuthGate>
-            <SearchPanel busy={running} onSearch={(q) => run({ q })} onCancel={cancel} />
+            <SearchPanel
+              busy={running}
+              onSearch={(q) => run({ q })}
+              onPick={(u) => run({ id: u.id })}
+              onCancel={cancel}
+            />
           </AuthGate>
         </div>
       </main>
@@ -52,7 +57,13 @@ export default function Home() {
   // Поиск пошёл — показываем воронку, выбор вуза и собранный профиль.
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-10">
-      <SearchPanel compact busy={running} onSearch={(q) => run({ q })} onCancel={cancel} />
+      <SearchPanel
+        compact
+        busy={running}
+        onSearch={(q) => run({ q })}
+        onPick={(u) => run({ id: u.id })}
+        onCancel={cancel}
+      />
 
       {error && (
         <p className="rounded-2xl border border-[var(--bad)]/40 bg-[var(--bad)]/10 p-4 text-sm text-[var(--bad)]">
