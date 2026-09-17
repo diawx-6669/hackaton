@@ -427,6 +427,7 @@ async def _resolve_uncached(query: str, limit: int = 8) -> list[University]:
         looks_like = _looks_like_institution(name, description)
 
         coords = _parse_point(det.get("coord")) or _parse_point(det.get("city_coord"))
+        city_coords = _parse_point(det.get("city_coord"))
         website = det.get("website")
         if website and not urlparse(website).scheme:
             website = f"https://{website}"
@@ -439,6 +440,7 @@ async def _resolve_uncached(query: str, limit: int = 8) -> list[University]:
                 city=det.get("city"),
                 country=det.get("country"),
                 coordinates=coords,
+                city_coordinates=city_coords,
                 website=website,
                 commons_category=det.get("commons_category"),
                 logo_url=det.get("logo"),

@@ -9,23 +9,35 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import AsyncIterator, Awaitable, Callable, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 from app.config import get_settings
 from app.models import (
     CampusDescription,
     CategoryBucket,
-    RejectReason,
-    SiteText,
+    Coordinates,
+    DistrictInfo,
+    Logistics,
     Photo,
     PhotoCategory,
     Profile,
+    RejectReason,
+    SiteText,
     Stage,
     StageEvent,
     Surroundings,
     University,
 )
-from app.services import commons, dedup, describe, evidence, officialsite, osm, wikidata
+from app.services import (
+    commons,
+    dedup,
+    describe,
+    evidence,
+    officialsite,
+    osm,
+    routing,
+    wikidata,
+)
 from app.services.classify import classify
 
 log = logging.getLogger(__name__)
@@ -80,6 +92,7 @@ async def _resolve_target(q: str | None, qid: str | None) -> tuple[Optional[Univ
         coords = wikidata.parse_point(det.get("coord")) or wikidata.parse_point(
             det.get("city_coord")
         )
+        city_coords = wikidata.parse_point(det.get("city_coord"))
         name = det.get("label") or qid
         uni = University(
             id=qid,
@@ -89,6 +102,7 @@ async def _resolve_target(q: str | None, qid: str | None) -> tuple[Optional[Univ
             city=det.get("city"),
             country=det.get("country"),
             coordinates=coords,
+            city_coordinates=city_coords,
             website=det.get("website"),
             commons_category=det.get("commons_category"),
             logo_url=det.get("logo"),
@@ -291,8 +305,10 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
     # параллельно фотографиям и никогда не задерживает их показ: если Overpass
     # не успел — в профиль уйдёт пометка, что источник не ответил.
     osm_task: asyncio.Task[Surroundings | None] | None = None
+    district_task: asyncio.Task[DistrictInfo | None] | None = None
     if uni.coordinates:
         osm_task = asyncio.create_task(osm.fetch_surroundings(uni.coordinates))
+        district_task = asyncio.create_task(osm.fetch_district(uni.coordinates))
 
     collected: list[Photo] = []
     pending = set(tasks)
@@ -448,6 +464,8 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
         *,
         partial: bool,
         surroundings: Surroundings | None = None,
+        district: DistrictInfo | None = None,
+        logistics: Logistics | None = None,
     ) -> Profile:
         return Profile(
             university=uni,
@@ -469,6 +487,8 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
             took_ms=clock.elapsed_ms,
             partial=partial,
             surroundings=surroundings,
+            district=district,
+            logistics=logistics,
         )
 
     # Фото готовы — отдаём их немедленно, не дожидаясь LLM (п.7 ТЗ:
@@ -526,20 +546,68 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
                 counts={"claims": len(description.claims)},
             )
 
-    surroundings: Surroundings | None = None
-    if osm_task is not None:
+    async def _collect_osm(
+        task: asyncio.Task[Any] | None, label: str, budget: float
+    ) -> Any:
+        """Забираем результат фонового запроса, не давая ему сорвать дедлайн."""
+        if task is None:
+            return None
         try:
-            surroundings = await asyncio.wait_for(
-                asyncio.shield(osm_task),
-                timeout=max(0.5, min(4.0, clock.remaining(settings.total_timeout))),
+            return await asyncio.wait_for(
+                asyncio.shield(task),
+                timeout=max(0.5, min(budget, clock.remaining(settings.total_timeout))),
             )
         except (asyncio.TimeoutError, Exception):  # noqa: BLE001
-            osm_task.cancel()
-            warnings.append("OpenStreetMap не успел ответить — блок «что рядом» не собран")
-        if surroundings is not None and not surroundings.available and surroundings.error:
-            warnings.append(surroundings.error)
+            task.cancel()
+            warnings.append(f"OpenStreetMap не успел ответить — блок «{label}» не собран")
+            return None
 
-    profile = assemble(description, partial=False, surroundings=surroundings)
+    surroundings = await _collect_osm(osm_task, "что рядом", 4.0)
+    district = await _collect_osm(district_task, "район", 4.0)
+    for block in (surroundings, district):
+        if block is not None and not block.available and block.error:
+            warnings.append(block.error)
+
+    # Логистика считается из уже собранного: координаты города — из Wikidata,
+    # общежитие — ближайшее из блока «что рядом». Лишних запросов в OSM нет.
+    dorm: tuple[str, Coordinates] | None = None
+    if surroundings is not None and surroundings.available:
+        for group in surroundings.groups:
+            if group.key == "dorms" and group.nearest:
+                nearest = group.nearest[0]
+                if nearest.coordinates is not None:
+                    dorm = (nearest.name or "общежитие", nearest.coordinates)
+                break
+
+    # Координаты города берём только если они отличаются от координат кампуса:
+    # у вузов без P625 обе точки — это центр города, и путь вышел бы нулевым.
+    city_center = uni.city_coordinates
+    if city_center is not None and uni.coordinates is not None and city_center == uni.coordinates:
+        city_center = None
+
+    logistics: Logistics | None = None
+    if uni.coordinates:
+        try:
+            logistics = await asyncio.wait_for(
+                routing.build_logistics(
+                    uni.coordinates,
+                    uni.name,
+                    city_center,
+                    uni.city,
+                    dorm,
+                ),
+                timeout=max(0.5, min(5.0, clock.remaining(settings.total_timeout))),
+            )
+        except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+            warnings.append("OSRM не ответил — время в пути не посчитано")
+
+    profile = assemble(
+        description,
+        partial=False,
+        surroundings=surroundings,
+        district=district,
+        logistics=logistics,
+    )
 
     yield StageEvent(
         stage=Stage.DONE,

@@ -122,6 +122,40 @@ export type Profile = {
   /** true — фото уже показаны, но конвейер ещё дописывает описание кампуса. */
   partial?: boolean;
   surroundings?: Surroundings | null;
+  district?: DistrictInfo | null;
+  logistics?: Logistics | null;
+};
+
+export type DistrictInfo = {
+  radius_m: number;
+  streets_total: number;
+  streets_lit: number;
+  streets_unlit: number;
+  streets_without_lit_tag: number;
+  lit_share_percent?: number | null;
+  street_lamps: number;
+  crossings: number;
+  emergency_phones: number;
+  police?: SurroundingPlace | null;
+  available: boolean;
+  error?: string | null;
+};
+
+export type RouteLeg = {
+  key: string;
+  title: string;
+  from_name: string;
+  to_name: string;
+  distance_m: number;
+  minutes: number;
+  mode: "driving" | "straight";
+  note: string;
+};
+
+export type Logistics = {
+  legs: RouteLeg[];
+  available: boolean;
+  error?: string | null;
 };
 
 export type SurroundingPlace = {
@@ -129,6 +163,7 @@ export type SurroundingPlace = {
   distance_m: number;
   walk_minutes: number;
   osm_url: string;
+  coordinates?: { lat: number; lon: number } | null;
 };
 
 export type SurroundingGroup = {

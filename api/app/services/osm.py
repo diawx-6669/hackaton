@@ -2,8 +2,14 @@
 
 Всё, что здесь считается, берётся из ответа Overpass и расстояния до точки
 кампуса. Ничего не достраивается: если объекта в OSM нет — мы пишем, что его
-нет в OSM, а не что его нет в реальности. Цен, освещённости улиц и наличия
-охраны здесь нет и быть не может — таких данных в открытых источниках нет.
+нет в OSM, а не что его нет в реальности.
+
+Отдельно про инфраструктуру района. Мы считаем факты, отмеченные на карте:
+сколько улиц помечено как освещённые, сколько фонарей и переходов, где
+ближайший полицейский участок. Сводной «оценки безопасности» здесь нет и не
+будет: она складывалась бы из данных, которых в OSM нет (охрана на входе,
+реальная освещённость, ночная обстановка), и выглядела бы авторитетно, будучи
+выдумкой. Про неполноту карты блок сообщает прямым текстом.
 """
 from __future__ import annotations
 
@@ -12,7 +18,13 @@ import logging
 from typing import Any
 
 from app.config import get_settings
-from app.models import Coordinates, Surroundings, SurroundingGroup, SurroundingPlace
+from app.models import (
+    Coordinates,
+    DistrictInfo,
+    Surroundings,
+    SurroundingGroup,
+    SurroundingPlace,
+)
 from app.services.cache import get_cache
 from app.services.evidence import haversine_m
 from app.services.http import post_json
@@ -71,6 +83,24 @@ GROUPS: list[tuple[str, str, tuple[str, ...]]] = [
         'nwr["amenity"="dormitory"]',
     )),
 ]
+
+
+# Инфраструктура района. Считаем только штуки, а не «баллы»: сводный индекс
+# безопасности по этим данным честно не выводится.
+DISTRICT_FILTERS: tuple[str, ...] = (
+    'way["highway"~"^(residential|living_street|pedestrian|footway|path|service|tertiary|secondary|primary|unclassified)$"]',
+    'node["highway"="street_lamp"]',
+    'node["highway"="crossing"]',
+    'node["crossing"]',
+    'nwr["amenity"="police"]',
+    'nwr["emergency"="phone"]',
+)
+
+
+def _build_district_query(coords: Coordinates, radius: int) -> str:
+    around = f"(around:{radius},{coords.lat},{coords.lon})"
+    parts = [f"{f}{around};" for f in DISTRICT_FILTERS]
+    return "[out:json][timeout:25];(" + "".join(parts) + ");out center tags;"
 
 
 def _build_query(coords: Coordinates, radius: int) -> str:
@@ -144,6 +174,7 @@ def parse_elements(
                 distance_m=round(distance),
                 walk_minutes=_walk_minutes(distance),
                 osm_url=f"https://www.openstreetmap.org/{el.get('type')}/{el.get('id')}",
+                coordinates=coords,
             )
         )
 
@@ -196,4 +227,103 @@ async def fetch_surroundings(
             total=0,
             available=False,
             error="OpenStreetMap (Overpass) не ответил — данные об окружении не собраны",
+        )
+
+
+def parse_district(
+    elements: list[dict[str, Any]], campus: Coordinates, radius: int
+) -> DistrictInfo:
+    """Факты об инфраструктуре района. Никакого сводного балла — см. докстроку модуля."""
+    lit_yes = 0
+    lit_no = 0
+    streets_untagged = 0
+    lamps = 0
+    crossings = 0
+    police: SurroundingPlace | None = None
+    emergency_phones = 0
+    seen: set[tuple[str, int]] = set()
+
+    for el in elements:
+        key = (el.get("type", ""), int(el.get("id", 0)))
+        if key in seen:
+            continue
+        seen.add(key)
+        tags = el.get("tags") or {}
+
+        if tags.get("highway") == "street_lamp":
+            lamps += 1
+            continue
+        if tags.get("highway") == "crossing" or "crossing" in tags:
+            crossings += 1
+            continue
+        if tags.get("emergency") == "phone":
+            emergency_phones += 1
+            continue
+        if tags.get("amenity") == "police":
+            coords = _element_coords(el)
+            if coords is not None:
+                distance = haversine_m(coords, campus)
+                if distance <= radius and (police is None or distance < police.distance_m):
+                    police = SurroundingPlace(
+                        name=tags.get("name") or tags.get("name:ru") or "",
+                        distance_m=round(distance),
+                        walk_minutes=_walk_minutes(distance),
+                        osm_url=f"https://www.openstreetmap.org/{el.get('type')}/{el.get('id')}",
+                    )
+            continue
+        if "highway" in tags:
+            lit = tags.get("lit")
+            if lit in ("yes", "24/7", "automatic", "sunset-sunrise"):
+                lit_yes += 1
+            elif lit == "no":
+                lit_no += 1
+            else:
+                streets_untagged += 1
+
+    streets_total = lit_yes + lit_no + streets_untagged
+    # Долю считаем от улиц, У КОТОРЫХ ТЕГ ЕСТЬ. Считать от всех — значит выдать
+    # непроставленный тег за отсутствие фонарей, а это разные вещи.
+    tagged = lit_yes + lit_no
+    lit_share = round(100 * lit_yes / tagged) if tagged else None
+
+    return DistrictInfo(
+        radius_m=radius,
+        streets_total=streets_total,
+        streets_lit=lit_yes,
+        streets_unlit=lit_no,
+        streets_without_lit_tag=streets_untagged,
+        lit_share_percent=lit_share,
+        street_lamps=lamps,
+        crossings=crossings,
+        emergency_phones=emergency_phones,
+        police=police,
+        available=True,
+    )
+
+
+async def fetch_district(
+    coords: Coordinates | None, radius: int = DEFAULT_RADIUS_M
+) -> DistrictInfo | None:
+    """Инфраструктура района вокруг кампуса. None — координат нет."""
+    if coords is None:
+        return None
+
+    s = get_settings()
+    cache = get_cache()
+    key = f"osm-district:v1:{coords.lat:.4f},{coords.lon:.4f}:{radius}"
+
+    async def produce() -> DistrictInfo:
+        data = await post_json(s.overpass_api, {"data": _build_district_query(coords, radius)})
+        return parse_district(data.get("elements") or [], coords, radius)
+
+    try:
+        return await cache.get_or_set(key, s.cache_ttl_resolve, produce)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        log.warning("overpass district failed: %s", exc)
+        return DistrictInfo(
+            radius_m=radius,
+            available=False,
+            error="OpenStreetMap (Overpass) не ответил — данные о районе не собраны",
         )

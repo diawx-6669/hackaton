@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     # Overpass: окружение кампуса (п.8 ТЗ). Публичный инстанс, ключ не нужен,
     # но есть лимиты — отсюда кеш и всего один ретрай.
     overpass_api: str = "https://overpass-api.de/api/interpreter"
+    # OSRM: время в пути. У публичного демо-сервера есть только автомобильный
+    # профиль — пешеходные участки поэтому считаются по прямой и так подписаны.
+    osrm_endpoint: str = "https://router.project-osrm.org"
 
     @property
     def active_llm(self) -> tuple[str, str] | None:

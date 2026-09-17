@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { CampusSummary } from "./CampusSummary";
 import { Lightbox } from "./Lightbox";
 import { PhotoCard } from "./PhotoCard";
+import { DistrictBlock } from "./District";
 import { SurroundingsBlock } from "./Surroundings";
 import {
   CATEGORY_LABELS,
@@ -158,6 +159,8 @@ export function ProfileView({ profile }: { profile: Profile }) {
       </header>
 
       {profile.surroundings && <SurroundingsBlock data={profile.surroundings} />}
+
+      <DistrictBlock district={profile.district} logistics={profile.logistics} />
 
       {profile.description && <CampusSummary description={profile.description} />}
       {!profile.description && profile.partial && (

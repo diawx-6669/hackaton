@@ -22,6 +22,9 @@ class University(BaseModel):
     city: Optional[str] = None
     country: Optional[str] = None
     coordinates: Optional[Coordinates] = None
+    city_coordinates: Optional[Coordinates] = Field(
+        default=None, description="Координаты города (P131) — для расчёта пути до центра"
+    )
     website: Optional[str] = None
     commons_category: Optional[str] = Field(
         default=None, description="Категория Wikimedia Commons (P373)"
@@ -199,6 +202,7 @@ class SurroundingPlace(BaseModel):
     distance_m: int = Field(..., description="Расстояние по прямой от координат кампуса")
     walk_minutes: int = Field(..., description="Оценка пешком по прямой, не по маршруту")
     osm_url: str
+    coordinates: Optional[Coordinates] = None
 
 
 class SurroundingGroup(BaseModel):
@@ -220,6 +224,52 @@ class Surroundings(BaseModel):
     error: Optional[str] = None
 
 
+class DistrictInfo(BaseModel):
+    """Инфраструктура района по OSM.
+
+    Здесь намеренно нет сводного «индекса безопасности»: данных, из которых его
+    можно было бы честно собрать (охрана, реальная освещённость, ночная
+    обстановка), в открытых источниках нет. Есть только то, что отмечено на
+    карте, — и отдельно сказано, у скольких улиц тег освещения не проставлен.
+    """
+
+    radius_m: int
+    streets_total: int = 0
+    streets_lit: int = 0
+    streets_unlit: int = 0
+    streets_without_lit_tag: int = 0
+    lit_share_percent: Optional[int] = Field(
+        default=None, description="Доля освещённых среди улиц С ТЕГОМ lit, не среди всех"
+    )
+    street_lamps: int = 0
+    crossings: int = 0
+    emergency_phones: int = 0
+    police: Optional[SurroundingPlace] = None
+    available: bool = True
+    error: Optional[str] = None
+
+
+class RouteLeg(BaseModel):
+    """Один участок пути. Либо реальный маршрут OSRM, либо расстояние по прямой."""
+
+    key: str
+    title: str
+    from_name: str
+    to_name: str
+    distance_m: int
+    minutes: int
+    mode: Literal["driving", "straight"] = "straight"
+    note: str = ""
+
+
+class Logistics(BaseModel):
+    """Логистика: сколько добираться (п.8 ТЗ, «дорога на пары»)."""
+
+    legs: list[RouteLeg] = Field(default_factory=list)
+    available: bool = True
+    error: Optional[str] = None
+
+
 class Profile(BaseModel):
     university: University
     verified: list[Photo]
@@ -237,6 +287,8 @@ class Profile(BaseModel):
         description="Фото уже готовы, но конвейер ещё работает (описание кампуса впереди)",
     )
     surroundings: Optional[Surroundings] = None
+    district: Optional[DistrictInfo] = None
+    logistics: Optional[Logistics] = None
 
 
 class ComparisonRow(BaseModel):
