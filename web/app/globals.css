@@ -17,6 +17,11 @@
   --border-soft: oklch(0.74 0.075 226 / 12%);
 
   --accent: oklch(0.82 0.12 215);
+  /* Цвета лент фона — из присланного макета. */
+  --ribbon-start: oklch(0.55 0.1 236);
+  --ribbon-bright: oklch(0.79 0.12 220);
+  --ribbon-mid: oklch(0.67 0.15 250);
+  --ribbon-end: oklch(0.56 0.1 252);
   --accent-deep: oklch(0.6 0.15 250);
   --on-accent: oklch(0.17 0.045 266);
 
@@ -94,37 +99,40 @@ kbd {
   isolation: isolate;
 }
 
-/* Подложка: тёмная основа с тёплым пятном в стороне, чтобы фон не был плоским. */
+/* ---------- фон: формы, цвета и тайминги перенесены из макета ---------- */
+
 .scene-base {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(1100px 700px at 72% 18%, oklch(0.24 0.06 250 / 55%), transparent 68%),
-    radial-gradient(900px 600px at 12% 82%, oklch(0.2 0.05 232 / 42%), transparent 70%),
+    radial-gradient(70% 75% at 72% 25%, oklch(0.24 0.07 250 / 0.58), transparent 70%),
+    radial-gradient(70% 70% at 8% 84%, oklch(0.2 0.06 228 / 0.38), transparent 70%),
     var(--background);
 }
 
-/* Ленты. Каждая группа плывёт со своей скоростью — отсюда ощущение течения. */
 .ribbons {
   position: absolute;
   inset: -10%;
   width: 120%;
   height: 120%;
+  opacity: 0.9;
 }
 
 .ribbon {
   transform-origin: 50% 50%;
-  animation-name: ribbon-flow;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
-  animation-direction: alternate;
-  will-change: transform;
+  animation: ribbon-flow 52s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+  opacity: 0.24;
 }
 
-/* Только transform: масштаб и сдвиг считает видеокарта, вёрстка не пересчитывается. */
+/* У каждой ленты своя скорость и фаза — рисунок не повторяется на глазах. */
+.ribbon-2 { animation-duration: 68s; animation-delay: -13s; opacity: 0.2; }
+.ribbon-3 { animation-duration: 82s; animation-delay: -31s; opacity: 0.18; }
+.ribbon-4 { animation-duration: 61s; animation-delay: -22s; opacity: 0.16; }
+
 @keyframes ribbon-flow {
-  from { transform: translate3d(-3%, 2%, 0) scaleY(0.94) rotate(-1.2deg); }
-  to   { transform: translate3d(3%, -2%, 0) scaleY(1.08) rotate(1.2deg); }
+  from { transform: translate3d(-4%, 3%, 0) scaleY(0.93) rotate(-1.5deg); }
+  to   { transform: translate3d(4%, -3%, 0) scaleY(1.1) rotate(1.5deg); }
 }
 
 .orbs {
@@ -135,36 +143,42 @@ kbd {
 .orb {
   position: absolute;
   border-radius: 50%;
-  translate: -50% -50%;
   background: radial-gradient(
-    circle at 35% 32%,
-    oklch(0.85 0.09 225 / 45%),
-    oklch(0.55 0.14 262 / 28%) 55%,
-    transparent 72%
+    circle at 34% 30%,
+    oklch(0.84 0.09 225 / 0.44),
+    oklch(0.55 0.14 260 / 0.24) 54%,
+    transparent 73%
   );
-  filter: blur(0.5px);
-  animation-name: orb-float;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
-  animation-direction: alternate;
+  animation: orb-float 35s ease-in-out infinite alternate;
   will-change: transform, opacity;
 }
 
+.orb-one { width: 190px; height: 190px; right: 7%; top: 13%; }
+.orb-two { width: 126px; height: 126px; left: 57%; top: 62%; animation-delay: -12s; animation-duration: 43s; }
+.orb-three { width: 64px; height: 64px; left: 46%; top: 78%; animation-delay: -21s; }
+.orb-four { width: 34px; height: 34px; left: 17%; top: 42%; animation-delay: -8s; }
+.orb-five { width: 48px; height: 48px; right: 3%; top: 26%; animation-delay: -18s; }
+
 @keyframes orb-float {
-  from { transform: translate3d(0, 14px, 0) scale(0.92); opacity: 0.55; }
-  to   { transform: translate3d(0, -18px, 0) scale(1.06); opacity: 0.95; }
+  from { transform: translate3d(-8px, 15px, 0) scale(0.92); opacity: 0.48; }
+  to   { transform: translate3d(12px, -20px, 0) scale(1.08); opacity: 0.9; }
+}
+
+@media (max-width: 767px) {
+  .orb-one { width: 130px; height: 130px; }
+  .ribbons { inset: -18%; width: 136%; height: 136%; }
 }
 
 .scene-shade {
   position: absolute;
   inset: 0;
-  /* Слева плотнее — там текст, справа легче, чтобы туманность читалась. */
+  /* Слева плотнее — там текст, справа легче, чтобы ленты читались. */
   background: linear-gradient(
     100deg,
-    oklch(0.07 0.025 270 / 72%) 0%,
-    oklch(0.07 0.025 270 / 38%) 40%,
-    oklch(0.08 0.03 270 / 14%) 72%,
-    oklch(0.07 0.025 270 / 34%) 100%
+    oklch(0.07 0.025 270 / 0.76),
+    oklch(0.07 0.025 270 / 0.35) 43%,
+    oklch(0.07 0.025 270 / 0.12) 72%,
+    oklch(0.07 0.025 270 / 0.35)
   );
 }
 
