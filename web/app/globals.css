@@ -94,14 +94,65 @@ kbd {
   isolation: isolate;
 }
 
-.cosmic-image {
+/* Подложка: тёмная основа с тёплым пятном в стороне, чтобы фон не был плоским. */
+.scene-base {
   position: absolute;
   inset: 0;
-  height: 100%;
-  width: 100%;
-  object-fit: cover;
-  transform-origin: 60% 44%;
-  animation: cosmic-drift 22s ease-in-out infinite alternate;
+  background:
+    radial-gradient(1100px 700px at 72% 18%, oklch(0.24 0.06 250 / 55%), transparent 68%),
+    radial-gradient(900px 600px at 12% 82%, oklch(0.2 0.05 232 / 42%), transparent 70%),
+    var(--background);
+}
+
+/* Ленты. Каждая группа плывёт со своей скоростью — отсюда ощущение течения. */
+.ribbons {
+  position: absolute;
+  inset: -10%;
+  width: 120%;
+  height: 120%;
+}
+
+.ribbon {
+  transform-origin: 50% 50%;
+  animation-name: ribbon-flow;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  will-change: transform;
+}
+
+/* Только transform: масштаб и сдвиг считает видеокарта, вёрстка не пересчитывается. */
+@keyframes ribbon-flow {
+  from { transform: translate3d(-3%, 2%, 0) scaleY(0.94) rotate(-1.2deg); }
+  to   { transform: translate3d(3%, -2%, 0) scaleY(1.08) rotate(1.2deg); }
+}
+
+.orbs {
+  position: absolute;
+  inset: 0;
+}
+
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  translate: -50% -50%;
+  background: radial-gradient(
+    circle at 35% 32%,
+    oklch(0.85 0.09 225 / 45%),
+    oklch(0.55 0.14 262 / 28%) 55%,
+    transparent 72%
+  );
+  filter: blur(0.5px);
+  animation-name: orb-float;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  will-change: transform, opacity;
+}
+
+@keyframes orb-float {
+  from { transform: translate3d(0, 14px, 0) scale(0.92); opacity: 0.55; }
+  to   { transform: translate3d(0, -18px, 0) scale(1.06); opacity: 0.95; }
 }
 
 .scene-shade {
@@ -110,10 +161,10 @@ kbd {
   /* Слева плотнее — там текст, справа легче, чтобы туманность читалась. */
   background: linear-gradient(
     100deg,
-    oklch(0.07 0.025 270 / 88%) 0%,
-    oklch(0.07 0.025 270 / 62%) 38%,
-    oklch(0.08 0.03 270 / 30%) 70%,
-    oklch(0.07 0.025 270 / 52%) 100%
+    oklch(0.07 0.025 270 / 72%) 0%,
+    oklch(0.07 0.025 270 / 38%) 40%,
+    oklch(0.08 0.03 270 / 14%) 72%,
+    oklch(0.07 0.025 270 / 34%) 100%
   );
 }
 
@@ -134,11 +185,6 @@ kbd {
     radial-gradient(circle at 42% 77%, var(--foreground) 0 0.8px, transparent 1.5px);
   background-size: 190px 170px, 240px 210px, 330px 290px, 270px 230px;
   animation: stars-float 18s linear infinite;
-}
-
-@keyframes cosmic-drift {
-  from { transform: scale(1.04) translate3d(0, 0, 0); }
-  to { transform: scale(1.12) translate3d(-1.6%, -1.2%, 0); }
 }
 
 @keyframes stars-float {
@@ -246,6 +292,6 @@ kbd {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cosmic-image, .star-field, .rise, .pulse-dot { animation: none; }
+  .ribbon, .orb, .star-field, .rise, .pulse-dot { animation: none; }
   .card-hover:hover, .primary-action:hover:not(:disabled) { transform: none; }
 }
