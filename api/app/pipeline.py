@@ -606,48 +606,21 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
         except (asyncio.TimeoutError, Exception):  # noqa: BLE001
             site_texts = []
 
-    description: CampusDescription | None = None
-    if verified or needs_review:
-        try:
-            result = await asyncio.wait_for(
-                describe.describe(uni, verified or needs_review, site_texts),
-                timeout=max(1.0, clock.remaining(settings.total_timeout)),
-            )
-        except asyncio.TimeoutError:
-            result = None
-            warnings.append("Описание кампуса не уложилось в бюджет времени")
-
-        if result is not None:
-            description = CampusDescription(
-                summary=result.summary,
-                claims=[dict(c) for c in result.claims],  # type: ignore[arg-type]
-                sources=result.sources,
-                insufficient_data=result.insufficient_data,
-                unverified_claims=result.unverified_claims,
-                model=result.model,
-            )
-            if result.unverified_claims:
-                warnings.append(
-                    f"В описании отброшено утверждений без источника: {len(result.unverified_claims)}"
-                )
-            yield StageEvent(
-                stage=Stage.DESCRIBED,
-                message="Описание кампуса собрано по найденным источникам",
-                elapsed_ms=clock.elapsed_ms,
-                counts={"claims": len(description.claims)},
-            )
-
     async def _collect_osm(
         task: asyncio.Task[Any] | None, label: str, budget: float
     ) -> Any:
-        """Забираем результат фонового запроса, не давая ему сорвать дедлайн."""
+        """Забираем результат фонового запроса.
+
+        Бюджет НЕ урезается остатком общего таймаута: фотографии к этому
+        моменту уже показаны, а Overpass считает запрос у себя и отвечает за
+        пять-пятнадцать секунд. Раньше здесь стоял min() с остатком, и после
+        похода в LLM карте доставались крохи — отсюда и брались вечные
+        «Overpass не ответил» на боевом сайте.
+        """
         if task is None:
             return None
         try:
-            return await asyncio.wait_for(
-                asyncio.shield(task),
-                timeout=max(0.5, min(budget, clock.remaining(settings.total_timeout))),
-            )
+            return await asyncio.wait_for(asyncio.shield(task), timeout=budget)
         except (asyncio.TimeoutError, Exception):  # noqa: BLE001
             # Тихо: блок сам скажет, что данных нет, а красная плашка наверху
             # для этого слишком громкая — она про проблемы с фотографиями.
@@ -655,11 +628,48 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
             task.cancel()
             return None
 
-    # Бюджет больше прежних четырёх секунд: Overpass считает запрос сам и
-    # быстро не отвечает. Фотографии в этот момент уже на экране, так что
-    # ожидание никому не мешает — оно съедает только хвост общего бюджета.
-    surroundings = await _collect_osm(osm_task, "что рядом", 12.0)
-    district = await _collect_osm(district_task, "район", 8.0)
+    # Описание от LLM и данные OSM друг от друга не зависят, поэтому ждём их
+    # одновременно. Последовательно — значит отдать карте остаток бюджета,
+    # которого после модели уже нет.
+    async def _describe() -> Optional[CampusDescription]:
+        if not (verified or needs_review):
+            return None
+        try:
+            result = await asyncio.wait_for(
+                describe.describe(uni, verified or needs_review, site_texts),
+                timeout=max(1.0, clock.remaining(settings.total_timeout)),
+            )
+        except asyncio.TimeoutError:
+            warnings.append("Описание кампуса не уложилось в бюджет времени")
+            return None
+        if result is None:
+            return None
+        if result.unverified_claims:
+            warnings.append(
+                f"В описании отброшено утверждений без источника: {len(result.unverified_claims)}"
+            )
+        return CampusDescription(
+            summary=result.summary,
+            claims=[dict(c) for c in result.claims],  # type: ignore[arg-type]
+            sources=result.sources,
+            insufficient_data=result.insufficient_data,
+            unverified_claims=result.unverified_claims,
+            model=result.model,
+        )
+
+    description, surroundings, district = await asyncio.gather(
+        _describe(),
+        _collect_osm(osm_task, "что рядом", 15.0),
+        _collect_osm(district_task, "район", 15.0),
+    )
+
+    if description is not None:
+        yield StageEvent(
+            stage=Stage.DESCRIBED,
+            message="Описание кампуса собрано по найденным источникам",
+            elapsed_ms=clock.elapsed_ms,
+            counts={"claims": len(description.claims)},
+        )
 
     # Если Overpass промолчал, блок всё равно уходит клиенту — пустой, но с
     # флагом available=false. Карта и координаты кампуса от Overpass не зависят,

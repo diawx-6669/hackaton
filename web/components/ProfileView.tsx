@@ -101,7 +101,10 @@ export function ProfileView({ profile }: { profile: Profile }) {
     ...(profile.district || profile.logistics
       ? [{ id: "sec-district", label: "Район и дорога" }]
       : []),
-    ...(profile.costs?.available ? [{ id: "sec-costs", label: "Стоимость" }] : []),
+    // Раздел показываем, даже когда цен не нашлось: там объяснено, почему их
+    // нет и почему мы не берём цифры со сторонних сайтов. Пункт, ведущий к
+    // честному ответу, полезнее исчезнувшего раздела.
+    ...(profile.costs ? [{ id: "sec-costs", label: "Стоимость" }] : []),
     ...((profile.events?.length ?? 0) > 0 || (profile.videos?.length ?? 0) > 0
       ? [{ id: "sec-events", label: "События и видео" }]
       : []),

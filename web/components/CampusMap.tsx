@@ -38,15 +38,15 @@ export default function CampusMap({
       });
       mapRef.current = map;
 
-      // Тёмная подложка CARTO поверх данных OpenStreetMap: светлая стандартная
-      // плитка на тёмной странице выглядит дырой. Атрибуция обязательна для
-      // обоих — и для данных OSM, и для оформления CARTO.
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        attribution:
-          '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, ' +
-          '© <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: "abcd",
-        maxZoom: 20,
+      // Штатная плитка OpenStreetMap: ключ не нужен, условия — только
+      // атрибуция. Тёмной она становится фильтром в CSS (класс dark-tiles),
+      // потому что подложки с готовой тёмной темой требуют платного ключа —
+      // на это мы и напоролись, поставив CARTO: карта уехала в продакшен с
+      // водяным знаком «API KEY REQUIRED» по всей площади.
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        className: "dark-tiles",
+        maxZoom: 19,
       }).addTo(map);
 
       const campusIcon = L.divIcon({
