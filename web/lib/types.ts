@@ -14,6 +14,9 @@ export type University = {
   commons_category?: string | null;
   logo_url?: string | null;
   inception?: string | null;
+  students?: number | null;
+  staff?: number | null;
+  short_name?: string | null;
   wikidata_url: string;
   match_score: number;
 };

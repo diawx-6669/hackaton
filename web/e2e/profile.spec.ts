@@ -54,3 +54,64 @@ test.describe("Профиль", () => {
     await expect(dialog).toContainText("Открыть источник");
   });
 });
+
+test.describe("Панель разделов", () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page);
+    await mockApi(page);
+    await runSearch(page);
+    await expect(page.getByRole("heading", { name: /Казахстанско-Британский/ })).toBeVisible();
+  });
+
+  test("перечисляет собранные разделы", async ({ page }) => {
+    const nav = page.getByRole("navigation", { name: "Разделы профиля" });
+    await expect(nav).toBeVisible();
+    for (const label of ["О вузе", "Что рядом", "Район и дорога", "Стоимость", "Галерея"]) {
+      await expect(nav.getByRole("link", { name: label })).toBeVisible();
+    }
+  });
+
+  test("не показывает раздел, которого нет", async ({ page }) => {
+    // В фикстуре описание от LLM пустое — пункта «Описание» быть не должно.
+    const nav = page.getByRole("navigation", { name: "Разделы профиля" });
+    await expect(nav.getByRole("link", { name: "Описание" })).toHaveCount(0);
+  });
+
+  test("клик по пункту приводит к нужному блоку", async ({ page }) => {
+    await page
+      .getByRole("navigation", { name: "Разделы профиля" })
+      .getByRole("link", { name: "Стоимость" })
+      .click();
+
+    await expect(page.getByRole("heading", { name: "Сколько это стоит" })).toBeInViewport();
+  });
+
+  test("панель остаётся видимой при прокрутке", async ({ page }) => {
+    await page.mouse.wheel(0, 2000);
+    await page.waitForTimeout(400);
+    await expect(page.getByRole("navigation", { name: "Разделы профиля" })).toBeInViewport();
+  });
+});
+
+test.describe("О вузе", () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page);
+    await mockApi(page);
+    await runSearch(page);
+  });
+
+  test("факты показываются без языковой модели", async ({ page }) => {
+    // В фикстуре description = null: блок обязан работать и без LLM.
+    const about = page
+      .locator("section", { has: page.getByRole("heading", { name: "О вузе" }) })
+      .last();
+    await expect(about).toContainText("4 200");
+    await expect(about).toContainText("Основан");
+    await expect(about).toContainText("2001");
+    await expect(about.getByRole("link", { name: /Wikidata/ })).toBeVisible();
+  });
+
+  test("есть кнопка аудиообзора", async ({ page }) => {
+    await expect(page.getByRole("button", { name: "Слушать обзор" })).toBeVisible();
+  });
+});

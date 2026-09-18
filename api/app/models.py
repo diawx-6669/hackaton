@@ -31,6 +31,9 @@ class University(BaseModel):
     )
     logo_url: Optional[str] = None
     inception: Optional[str] = None
+    students: Optional[int] = Field(default=None, description="Число студентов (P2196)")
+    staff: Optional[int] = Field(default=None, description="Число сотрудников (P1128)")
+    short_name: Optional[str] = Field(default=None, description="Краткое название (P1813)")
     wikidata_url: str
     match_score: float = Field(
         default=0.0, description="0..1 — насколько запрос похож на название/алиас"
@@ -399,6 +402,10 @@ class SiteText(BaseModel):
     url: str
     title: str
     text: str
+    rows: list[str] = Field(
+        default_factory=list,
+        description="Строки страницы как есть, включая ячейки таблиц — отсюда берутся цены",
+    )
 
 
 class UploadRecord(BaseModel):

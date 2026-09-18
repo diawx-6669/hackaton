@@ -16,6 +16,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
  */
 const SEEN_KEY = "campuslens-intro-seen";
 
+/** Показать заставку по требованию: шлёт шапка при Alt+клике по логотипу. */
+export const INTRO_EVENT = "campuslens:intro";
+
 export function Intro() {
   const [show, setShow] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -25,6 +28,9 @@ export function Intro() {
     // Решение принимаем кадром позже: localStorage на сервере нет, а ставить
     // состояние прямо в теле эффекта нельзя — будет лишний проход рендера.
     const frame = window.requestAnimationFrame(() => {
+      // ?intro=1 — принудительный показ: иначе пересмотреть заставку нельзя,
+      // не залезая в localStorage руками. На эту ссылку ведёт логотип в шапке.
+      const forced = new URLSearchParams(window.location.search).get("intro") === "1";
       let seen = true;
       try {
         seen = window.localStorage.getItem(SEEN_KEY) === "1";
@@ -32,7 +38,7 @@ export function Intro() {
         // Приватный режим: считаем, что видели, — лучше не показать, чем навязать.
       }
       const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (!seen && !reduced) setShow(true);
+      if (forced || (!seen && !reduced)) setShow(true);
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
@@ -45,6 +51,15 @@ export function Intro() {
     }
     setLeaving(true);
     window.setTimeout(() => setShow(false), 420);
+  }, []);
+
+  useEffect(() => {
+    const replay = () => {
+      setLeaving(false);
+      setShow(true);
+    };
+    window.addEventListener(INTRO_EVENT, replay);
+    return () => window.removeEventListener(INTRO_EVENT, replay);
   }, []);
 
   useEffect(() => {
@@ -77,7 +92,10 @@ export function Intro() {
         onEnded={close}
         onError={close}
         className="max-h-full max-w-full object-contain"
-      />
+      >
+        {/* Браузер без H.264 (бывает у сборок Chromium в Linux) закроет
+            заставку по onError и просто пустит человека на сайт. */}
+      </video>
 
       <button
         type="button"

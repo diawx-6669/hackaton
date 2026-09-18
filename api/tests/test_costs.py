@@ -64,3 +64,33 @@ def test_at_most_two_quotes_per_topic():
     )
     result = costs.extract_costs([site(text)])
     assert len([q for q in result.quotes if q.topic == "housing"]) == 2
+
+
+def test_price_from_table_cells():
+    """Цены почти всегда в таблице: тема в одной ячейке, сумма в соседней."""
+    result = costs.extract_costs([
+        SiteText(
+            url="https://kbtu.edu.kz/ru/dorm",
+            title="Общежитие",
+            text="",
+            rows=["Услуга", "Стоимость", "Проживание в общежитии", "45 000 тенге в месяц"],
+        )
+    ])
+
+    assert result.available is True
+    quote = result.quotes[0]
+    assert "Проживание в общежитии" in quote.quote
+    assert "45 000 тенге" in quote.quote
+    assert quote.url.endswith("/dorm")
+
+
+def test_table_without_amounts_is_not_a_price():
+    result = costs.extract_costs([
+        SiteText(
+            url="https://kbtu.edu.kz/ru/dorm",
+            title="Общежитие",
+            text="",
+            rows=["Проживание в общежитии", "уточняйте в деканате"],
+        )
+    ])
+    assert result.available is False

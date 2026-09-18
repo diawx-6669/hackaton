@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import { CampusSummary } from "./CampusSummary";
 import { Lightbox } from "./Lightbox";
 import { PhotoCard } from "./PhotoCard";
+import { ProfileNav, type NavSection } from "./ProfileNav";
+import { AboutUniversity } from "./AboutUniversity";
 import { CostsBlock } from "./Costs";
 import { DistrictBlock } from "./District";
 import { EventsBlock } from "./Events";
@@ -91,8 +93,26 @@ export function ProfileView({ profile }: { profile: Profile }) {
     return counts;
   }, [profile.rejected]);
 
+  // В панель попадают только собранные разделы: пункт, ведущий в пустоту,
+  // хуже отсутствующего.
+  const sections: NavSection[] = [
+    { id: "sec-about", label: "О вузе" },
+    ...(profile.surroundings ? [{ id: "sec-nearby", label: "Что рядом" }] : []),
+    ...(profile.district || profile.logistics
+      ? [{ id: "sec-district", label: "Район и дорога" }]
+      : []),
+    ...(profile.costs?.available ? [{ id: "sec-costs", label: "Стоимость" }] : []),
+    ...((profile.events?.length ?? 0) > 0 || (profile.videos?.length ?? 0) > 0
+      ? [{ id: "sec-events", label: "События и видео" }]
+      : []),
+    ...(profile.description ? [{ id: "sec-summary", label: "Описание" }] : []),
+    { id: "sec-gallery", label: "Галерея" },
+  ];
+
   return (
     <section className="grid gap-4">
+      <ProfileNav sections={sections} />
+
       {/* Шапка вуза */}
       <header className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -161,20 +181,34 @@ export function ProfileView({ profile }: { profile: Profile }) {
         )}
       </header>
 
-      {profile.surroundings && <SurroundingsBlock data={profile.surroundings} />}
+      <div id="sec-about" className="scroll-mt-28">
+        <AboutUniversity university={uni} description={profile.description} />
+      </div>
 
-      <DistrictBlock district={profile.district} logistics={profile.logistics} />
+      <div id="sec-nearby" className="scroll-mt-28">
+        {profile.surroundings && <SurroundingsBlock data={profile.surroundings} />}
+      </div>
 
-      {profile.costs && <CostsBlock data={profile.costs} />}
+      <div id="sec-district" className="scroll-mt-28">
+        <DistrictBlock district={profile.district} logistics={profile.logistics} />
+      </div>
 
-      <EventsBlock
-        events={profile.events ?? []}
-        videos={profile.videos ?? []}
-        photos={[...profile.verified, ...profile.needs_review]}
-        onOpen={setLightbox}
-      />
+      <div id="sec-costs" className="scroll-mt-28">
+        {profile.costs && <CostsBlock data={profile.costs} />}
+      </div>
 
-      {profile.description && <CampusSummary description={profile.description} />}
+      <div id="sec-events" className="scroll-mt-28">
+        <EventsBlock
+          events={profile.events ?? []}
+          videos={profile.videos ?? []}
+          photos={[...profile.verified, ...profile.needs_review]}
+          onOpen={setLightbox}
+        />
+      </div>
+
+      <div id="sec-summary" className="scroll-mt-28">
+        {profile.description && <CampusSummary description={profile.description} />}
+      </div>
       {!profile.description && profile.partial && (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
           <p className="text-sm text-[var(--muted)]">
@@ -189,7 +223,7 @@ export function ProfileView({ profile }: { profile: Profile }) {
       )}
 
       {/* Галерея или карта */}
-      <div className="flex flex-wrap gap-2">
+      <div id="sec-gallery" className="flex scroll-mt-28 flex-wrap gap-2">
         {(["gallery", "map"] as const).map((v) => (
           <button
             key={v}

@@ -41,18 +41,32 @@ JUNK_IN_URL = (
     "герб", "логотип",
 )
 
+# Страницы, где вузы публикуют цены. Отдельный набор, а не добавка к
+# PAGE_HINTS: иначе страницы с фотографиями вытеснили бы их из лимита обхода,
+# и блок «сколько это стоит» всегда оставался бы пустым.
+PRICE_HINTS = (
+    "tuition", "price", "cost", "fee", "payment", "admission", "apply",
+    "accommodation", "dormitor", "hostel", "residence",
+    "стоимост", "оплат", "цен", "прайс", "тариф", "поступл", "абитуриент",
+    "проживан", "общежит", "төлем", "баға",
+)
+
 IMAGE_EXT = (".jpg", ".jpeg", ".png", ".webp")
 MAX_PAGES = 5
+MAX_PRICE_PAGES = 4
 MAX_IMAGES = 40
 PAGE_TIMEOUT = 6.0
 
 
 # Блоки, текст которых к описанию кампуса отношения не имеет.
 SKIP_TAGS = {"script", "style", "nav", "footer", "header", "form", "noscript", "svg"}
-TEXT_TAGS = {"p", "h1", "h2", "h3", "li"}
+# td/th нужны ради таблиц: цены вузы почти всегда публикуют таблицей.
+TEXT_TAGS = {"p", "h1", "h2", "h3", "li", "td", "th", "dd", "dt"}
 MIN_LINE = 60       # короче — это пункт меню, а не предложение
 MAX_PAGE_CHARS = 900
-MAX_TOTAL_PAGES = 4
+MAX_TOTAL_PAGES = 10
+MAX_ROWS = 400        # строк со страницы, чтобы таблица цен влезла целиком
+MAX_ROW_CHARS = 220
 
 
 class _TextExtractor(HTMLParser):
@@ -94,17 +108,30 @@ class _TextExtractor(HTMLParser):
         elif self._capture and not self._skip_depth:
             self._chunks.append(data)
 
-    @property
-    def text(self) -> str:
+    def _lines(self) -> list[str]:
         raw = "".join(self._chunks)
-        lines = []
+        out: list[str] = []
         seen: set[str] = set()
         for line in raw.split("\n"):
             cleaned = re.sub(r"\s+", " ", line).strip()
-            if len(cleaned) >= MIN_LINE and cleaned not in seen:
+            if cleaned and cleaned not in seen:
                 seen.add(cleaned)
-                lines.append(cleaned)
-        return " ".join(lines)[:MAX_PAGE_CHARS]
+                out.append(cleaned[:MAX_ROW_CHARS])
+        return out
+
+    @property
+    def text(self) -> str:
+        """Связный текст для описания: только длинные строки, склеенные подряд."""
+        return " ".join(l for l in self._lines() if len(l) >= MIN_LINE)[:MAX_PAGE_CHARS]
+
+    @property
+    def rows(self) -> list[str]:
+        """Все строки как есть, включая короткие ячейки таблиц.
+
+        Нужны для цен: «45 000 тенге» в ячейке короче порога MIN_LINE и в
+        связный текст не попадает, а это ровно то, что мы ищем.
+        """
+        return self._lines()[:MAX_ROWS]
 
 
 class _Extractor(HTMLParser):
@@ -177,19 +204,32 @@ def _is_photo_url(url: str) -> bool:
 
 
 def _pick_pages(html: str, base: str, host: str) -> list[str]:
+    """Внутренние ссылки, похожие на нужные нам страницы.
+
+    Два независимых лимита: на страницы с фотографиями и на страницы с ценами.
+    Общий лимит съедала бы первая же галерея, и цены мы бы не нашли никогда.
+    """
     parser = _Extractor()
     parser.feed(html)
-    picked: list[str] = []
+    photos: list[str] = []
+    prices: list[str] = []
+
     for href in parser.links:
         absolute = urljoin(base, href)
         parsed = urlparse(absolute)
         if parsed.hostname != host or parsed.scheme not in ("http", "https"):
             continue
-        if any(hint in absolute.lower() for hint in PAGE_HINTS) and absolute not in picked:
-            picked.append(absolute)
-        if len(picked) >= MAX_PAGES:
+        low = absolute.lower()
+        if any(hint in low for hint in PRICE_HINTS):
+            if absolute not in prices and len(prices) < MAX_PRICE_PAGES:
+                prices.append(absolute)
+        elif any(hint in low for hint in PAGE_HINTS):
+            if absolute not in photos and len(photos) < MAX_PAGES:
+                photos.append(absolute)
+        if len(photos) >= MAX_PAGES and len(prices) >= MAX_PRICE_PAGES:
             break
-    return picked
+
+    return [*photos, *prices]
 
 
 def _to_photos(html: str, page_url: str, host: str) -> list[Photo]:
@@ -282,8 +322,11 @@ async def collect_texts(website: str) -> list[SiteText]:
             continue
 
         body = parser.text or parser.description
-        if body and len(body) >= MIN_LINE:
-            texts.append(SiteText(url=url, title=parser.title or url, text=body))
+        rows = parser.rows
+        if (body and len(body) >= MIN_LINE) or rows:
+            texts.append(
+                SiteText(url=url, title=parser.title or url, text=body or "", rows=rows)
+            )
     return texts
 
 

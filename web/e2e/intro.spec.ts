@@ -53,3 +53,14 @@ test.describe("Интро", () => {
     await expect(logo).toBeVisible();
   });
 });
+
+test("заставку можно пересмотреть кнопкой в шапке", async ({ page }) => {
+  await mockApi(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Пропустить" }).click();
+  await expect(page.getByRole("dialog", { name: "Заставка CampusLens" })).toHaveCount(0);
+
+  await page.locator("header").getByRole("button", { name: "Заставка" }).click();
+  await expect(page.getByRole("dialog", { name: "Заставка CampusLens" })).toBeVisible();
+});

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import Image from "next/image";
+import { INTRO_EVENT } from "./Intro";
 
 const MENU = [
   { href: "/", label: "Поиск" },
@@ -16,6 +17,23 @@ export function SiteHeader() {
   const pathname = usePathname();
   const { user, loading, logout } = useAuth();
   const [open, setOpen] = useState(false);
+
+  // Событие, а не переход по адресу: Intro смонтирован в layout и не
+  // перемонтируется от смены URL, так что параметр до него бы не дошёл.
+  const replayIntro = () => {
+    setOpen(false);
+    window.dispatchEvent(new Event(INTRO_EVENT));
+  };
+
+  const introButton = (extra = "") => (
+    <button
+      type="button"
+      onClick={replayIntro}
+      className={`whitespace-nowrap rounded-lg px-3 py-2 text-left text-[var(--muted)] transition hover:bg-[var(--surface)] hover:text-[var(--foreground)] ${extra}`}
+    >
+      Заставка
+    </button>
+  );
 
   const link = (href: string, label: string) => (
     <Link
@@ -52,6 +70,7 @@ export function SiteHeader() {
         {/* Полное меню — от планшета и шире */}
         <div className="hidden items-center gap-1 text-sm md:flex">
           {MENU.map((m) => link(m.href, m.label))}
+          {introButton()}
 
           {loading ? null : user ? (
             <span className="ml-2 flex items-center gap-2 border-l border-[var(--border-soft)] pl-3">
@@ -98,6 +117,7 @@ export function SiteHeader() {
         <div className="border-t border-[var(--border-soft)] bg-[oklch(0.1_0.03_268_/_92%)] px-4 py-2 md:hidden">
           <div className="mx-auto grid max-w-6xl gap-1 text-sm">
             {MENU.map((m) => link(m.href, m.label))}
+            {introButton()}
 
             {loading ? null : user ? (
               <div className="mt-1 flex items-center justify-between border-t border-[var(--border-soft)] pt-2">

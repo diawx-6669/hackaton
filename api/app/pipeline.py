@@ -113,6 +113,9 @@ async def _resolve_target(q: str | None, qid: str | None) -> tuple[Optional[Univ
             commons_category=det.get("commons_category"),
             logo_url=det.get("logo"),
             inception=(det.get("inception") or "")[:10] or None,
+            students=_to_int(det.get("students")),
+            staff=_to_int(det.get("staff")),
+            short_name=det.get("short_name"),
             wikidata_url=f"https://www.wikidata.org/wiki/{qid}",
             match_score=1.0,
         )
@@ -124,6 +127,16 @@ async def _resolve_target(q: str | None, qid: str | None) -> tuple[Optional[Univ
     if wikidata.is_ambiguous(candidates):
         return None, candidates
     return candidates[0], candidates
+
+
+def _to_int(value: str | None) -> Optional[int]:
+    """Число из Wikidata: приходит строкой, иногда с плюсом или дробной частью."""
+    if not value:
+        return None
+    try:
+        return int(float(str(value).lstrip("+")))
+    except ValueError:
+        return None
 
 
 def _build_collectors(uni: University) -> list[Collector]:

@@ -71,6 +71,7 @@ _POINT_RE = re.compile(r"Point\(\s*(-?[\d.]+)\s+(-?[\d.]+)\s*\)")
 _DETAILS_SPARQL = """
 SELECT ?item ?itemLabel ?itemDescription ?enLabel ?alias ?coord ?cityCoord ?website
        ?commonsCat ?cityLabel ?countryLabel ?logo ?inception ?isEdu
+       ?students ?staff ?shortName
 WHERE {
   VALUES ?item { %(values)s }
   # Английское название и алиасы нужны не для показа, а как улика: файлы на
@@ -83,6 +84,9 @@ WHERE {
   OPTIONAL { ?item wdt:P17 ?country . }
   OPTIONAL { ?item wdt:P154 ?logo . }
   OPTIONAL { ?item wdt:P571 ?inception . }
+  OPTIONAL { ?item wdt:P2196 ?students . }
+  OPTIONAL { ?item wdt:P1128 ?staff . }
+  OPTIONAL { ?item wdt:P1813 ?shortName . }
   OPTIONAL {
     ?item wdt:P131 ?city .
     OPTIONAL { ?city wdt:P625 ?cityCoord . }
@@ -208,6 +212,9 @@ _CLAIM_MAP = {
     "P373": "commons_category",
     "P154": "logo",
     "P571": "inception",
+    "P2196": "students",
+    "P1128": "staff",
+    "P1813": "short_name",
 }
 
 
@@ -299,6 +306,9 @@ async def _fetch_details_action(qids: list[str]) -> dict[str, dict[str, Any]]:
                     "https://commons.wikimedia.org/wiki/Special:FilePath/"
                     + quote(value.replace(" ", "_"))
                 )
+            elif key in ("students", "staff") and isinstance(value, dict):
+                # Количественные значения приходят как {'amount': '+4200', ...}
+                rec[key] = str(value.get("amount", "")).lstrip("+")
             elif isinstance(value, str):
                 rec[key] = value
 
@@ -394,10 +404,23 @@ async def fetch_details(qids: list[str]) -> dict[str, dict[str, Any]]:
         take("countryLabel", "country")
         take("logo", "logo")
         take("inception", "inception")
+        take("students", "students")
+        take("staff", "staff")
+        take("shortName", "short_name")
         is_edu = row.get("isEdu", {}).get("value")
         if is_edu is not None:
             rec["is_edu"] = is_edu in ("true", "1")
     return out
+
+
+def _to_int(value: str | None) -> Optional[int]:
+    """Число из Wikidata: приходит строкой, иногда с плюсом или дробной частью."""
+    if not value:
+        return None
+    try:
+        return int(float(str(value).lstrip("+")))
+    except ValueError:
+        return None
 
 
 def _merge_aliases(name: str, search_aliases: list[str], details: dict[str, Any]) -> list[str]:
@@ -504,6 +527,9 @@ async def _resolve_uncached(query: str, limit: int = 8) -> list[University]:
                 commons_category=det.get("commons_category"),
                 logo_url=det.get("logo"),
                 inception=(det.get("inception") or "")[:10] or None,
+                students=_to_int(det.get("students")),
+                staff=_to_int(det.get("staff")),
+                short_name=det.get("short_name"),
                 wikidata_url=f"https://www.wikidata.org/wiki/{qid}",
                 match_score=similarity(query, name, *aliases),
         )

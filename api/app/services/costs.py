@@ -63,31 +63,44 @@ def extract_costs(site_texts: list[SiteText] | None) -> Costs:
     per_topic: dict[str, int] = {}
     seen: set[str] = set()
 
-    for site in site_texts:
-        for raw in _SENTENCE_RE.findall(site.text):
-            sentence = _clean(raw)
-            if not MONEY_RE.search(sentence):
+    def add(text: str, site: SiteText) -> None:
+        """Кладёт цитату, если в ней есть и сумма, и тема, и место ещё осталось."""
+        text = _clean(text)
+        if not text or not MONEY_RE.search(text):
+            return
+        lower = text.lower()
+        for key, title, terms in TOPICS:
+            if not any(t in lower for t in terms):
                 continue
-            lower = sentence.lower()
-            for key, title, terms in TOPICS:
-                if not any(t in lower for t in terms):
-                    continue
-                if per_topic.get(key, 0) >= MAX_QUOTES_PER_TOPIC:
-                    break
-                if sentence in seen:
-                    break
-                seen.add(sentence)
-                per_topic[key] = per_topic.get(key, 0) + 1
-                quotes.append(
-                    CostQuote(
-                        topic=key,
-                        topic_title=title,
-                        quote=sentence,
-                        page_title=site.title,
-                        url=site.url,
-                    )
+            if per_topic.get(key, 0) >= MAX_QUOTES_PER_TOPIC or text in seen:
+                return
+            seen.add(text)
+            per_topic[key] = per_topic.get(key, 0) + 1
+            quotes.append(
+                CostQuote(
+                    topic=key,
+                    topic_title=title,
+                    quote=text,
+                    page_title=site.title,
+                    url=site.url,
                 )
-                break
+            )
+            return
+
+    for site in site_texts:
+        # 1. Таблицы. Цены на сайтах вузов почти всегда таблицей, и тогда тема
+        # («Проживание») стоит в одной ячейке, а сумма — в соседней. Поэтому
+        # смотрим и саму строку, и её пару с предыдущей.
+        previous = ""
+        for row in site.rows:
+            add(row, site)
+            if previous:
+                add(f"{previous} — {row}", site)
+            previous = row
+
+        # 2. Обычный текст абзацами.
+        for raw in _SENTENCE_RE.findall(site.text):
+            add(raw, site)
 
     if not quotes:
         return Costs(
