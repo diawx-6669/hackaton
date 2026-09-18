@@ -301,3 +301,45 @@ async def test_verified_event_carries_photos_before_description(full_mock):
         p["id"] for p in done["verified"]
     ]
     assert verified.payload["stats"] == done["stats"]
+
+
+async def test_first_paint_does_not_wait_for_slow_source(api_mock, monkeypatch):
+    """Медленный источник не задерживает первый показ фотографий."""
+    import asyncio
+
+    from app.config import get_settings
+
+    monkeypatch.setenv("CAMPUSLENS_FIRST_PAINT_BUDGET", "0.3")
+    monkeypatch.setenv("CAMPUSLENS_TOTAL_TIMEOUT", "8")
+    get_settings.cache_clear()
+
+    api_mock.get(WIKIDATA_API).mock(return_value=httpx.Response(200, json=fixtures.WBSEARCH))
+    api_mock.get(WIKIDATA_SPARQL).mock(return_value=httpx.Response(200, json=fixtures.SPARQL))
+    api_mock.get(COMMONS_API).mock(side_effect=commons_handler(fixtures.COMMONS_FIXTURES))
+
+    async def slow_site(*args, **kwargs):
+        await asyncio.sleep(3.0)
+        return []
+
+    from app.services import officialsite
+
+    monkeypatch.setattr(officialsite, "collect_texts", slow_site)
+    monkeypatch.setattr(officialsite, "collect", slow_site)
+
+    first_verified_ms: int | None = None
+    events = []
+    async for event in stream_profile(qid=fixtures.QID):
+        events.append(event)
+        if event.stage is Stage.VERIFIED and first_verified_ms is None:
+            first_verified_ms = event.elapsed_ms
+            assert event.payload is not None
+            assert event.payload["partial"] is True
+
+    get_settings.cache_clear()
+
+    assert first_verified_ms is not None, "первый показ обязан случиться"
+    # Медленный источник спит 3 с — первый показ должен опередить его заметно.
+    assert first_verified_ms < 2000, f"первый показ занял {first_verified_ms} мс"
+    # И в конце всё равно приходит полный профиль.
+    assert events[-1].stage is Stage.DONE
+    assert events[-1].payload["partial"] is False

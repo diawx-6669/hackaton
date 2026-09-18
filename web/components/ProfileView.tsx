@@ -178,7 +178,8 @@ export function ProfileView({ profile }: { profile: Profile }) {
       {!profile.description && profile.partial && (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
           <p className="text-sm text-[var(--muted)]">
-            Фото уже здесь. Описание кампуса дописывается по найденным источникам…
+            Первые фото уже здесь. Остальные источники ещё отвечают, описание кампуса
+            дописывается — страница обновится сама.
           </p>
           <div className="mt-3 grid gap-2">
             <div className="h-3 w-full animate-pulse rounded bg-[var(--surface-2)]" />

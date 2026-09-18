@@ -20,7 +20,50 @@ class UpstreamUnavailable(RuntimeError):
     """Wikidata не ответила ни на один запрос — это не «вуз не найден»."""
 
 
-SEARCH_LANGUAGES = ("ru", "en", "kk")
+# Язык поиска подбирается под письменность запроса. Гонять все языки мира на
+# каждый запрос нельзя — это десятки лишних обращений к Wikidata и секунды
+# сверху. Английский есть в каждом наборе: в Wikidata он подписан почти у всего.
+SEARCH_LANGUAGES = ("ru", "en", "kk")  # запасной набор, если письменность не узнали
+
+SCRIPT_LANGUAGES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    # (имя письменности, диапазон символов, языки)
+    ("cyrillic", "\u0400-\u04ff", ("ru", "en", "kk", "uk", "sr", "bg")),
+    ("arabic", "\u0600-\u06ff", ("ar", "en", "fa", "ur")),
+    ("cjk", "\u4e00-\u9fff", ("zh", "en", "ja")),
+    ("kana", "\u3040-\u30ff", ("ja", "en")),
+    ("hangul", "\uac00-\ud7af", ("ko", "en")),
+    ("devanagari", "\u0900-\u097f", ("hi", "en", "mr")),
+    ("greek", "\u0370-\u03ff", ("el", "en")),
+    ("hebrew", "\u0590-\u05ff", ("he", "en")),
+    ("thai", "\u0e00-\u0e7f", ("th", "en")),
+    ("georgian", "\u10a0-\u10ff", ("ka", "en")),
+    ("armenian", "\u0530-\u058f", ("hy", "en")),
+)
+
+# Латиница покрывает больше всего стран, поэтому набор шире: это самые частые
+# языки, на которых вузы подписаны в Wikidata.
+LATIN_LANGUAGES = ("en", "de", "fr", "es", "pt", "it", "tr", "pl", "id", "nl")
+
+# Сколько обращений к wbsearchentities готовы сделать на один запрос.
+MAX_SEARCH_REQUESTS = 18
+
+_SCRIPT_RES = tuple(
+    (langs, re.compile(f"[{ranges}]")) for _, ranges, langs in SCRIPT_LANGUAGES
+)
+
+
+def languages_for(query: str) -> tuple[str, ...]:
+    """Языки поиска под письменность запроса.
+
+    Смысл в том, чтобы вуз находился независимо от страны, но чтобы за это не
+    платили все остальные запросы: набор всегда небольшой.
+    """
+    for langs, pattern in _SCRIPT_RES:
+        if pattern.search(query):
+            return langs
+    if re.search(r"[A-Za-z]", query):
+        return LATIN_LANGUAGES
+    return SEARCH_LANGUAGES
 
 # Point(76.9455 43.2352) -> (lon, lat)
 _POINT_RE = re.compile(r"Point\(\s*(-?[\d.]+)\s+(-?[\d.]+)\s*\)")
@@ -93,10 +136,16 @@ async def _search_once(query: str, language: str, limit: int) -> list[dict[str, 
 async def search_entities(query: str, limit: int = 12) -> dict[str, dict[str, Any]]:
     """Ищем по всем вариантам запроса и языкам параллельно, склеиваем по QID."""
     variants = expand_query(query)
+    languages = languages_for(query)
+    # Потолок на число запросов: варианты написания умножаются на языки, и без
+    # ограничения латинский запрос давал бы под сорок обращений к Wikidata —
+    # это секунды сверху и риск упереться в лимиты.
+    if variants and len(variants) * len(languages) > MAX_SEARCH_REQUESTS:
+        languages = languages[: max(2, MAX_SEARCH_REQUESTS // len(variants))]
     tasks = [
         _search_once(variant, lang, limit)
         for variant in variants
-        for lang in SEARCH_LANGUAGES
+        for lang in languages
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -371,9 +420,19 @@ def _looks_like_institution(name: str, description: str | None) -> bool:
     """Подстраховка, если SPARQL не ответил: смотрим на текст описания."""
     blob = f"{name} {description or ''}".lower()
     keywords = (
-        "univers", "college", "institut", "academy", "school",
+        # латиница: en, de, fr, es, pt, it, nl, pl, tr, id, scandi
+        "univers", "college", "institut", "academy", "academi", "school",
+        "hochschule", "fachhochschule", "universidad", "universidade",
+        "università", "universiteit", "uniwersytet", "üniversite",
+        "escuela", "escola", "faculdade", "politec", "polytech", "ecole",
+        "école", "högskola", "yliopisto", "universitet", "univerzit",
+        # кириллица
         "универ", "институт", "академ", "колледж", "вуз", "политех",
-        "university", "универcитет", "жоғары оқу",
+        "университет", "жоғары оқу", "унiверситет",
+        # остальные письменности
+        "大学", "学院", "大學", "대학", "جامعة", "كلية", "πανεπιστήμιο",
+        "מכללה", "אוניברסיטה", "विश्वविद्यालय", "มหาวิทยาลัย",
+        "đại học", "trường",
     )
     return any(k in blob for k in keywords)
 

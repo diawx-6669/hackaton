@@ -324,30 +324,151 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
 
     collected: list[Photo] = []
     pending = set(tasks)
-    while pending:
-        remaining = clock.remaining(settings.total_timeout)
-        if remaining <= 0:
-            break
-        done, pending = await asyncio.wait(
-            pending, timeout=remaining, return_when=asyncio.FIRST_COMPLETED
-        )
-        if not done:
-            break
-        for task in done:
-            name = tasks[task]
-            try:
-                photos = task.result()
-            except Exception as exc:  # noqa: BLE001
-                log.warning("collector %s failed: %s", name, exc)
-                warnings.append(f"Источник «{name}» не ответил: {exc}")
-                continue
-            collected.extend(photos)
-            yield StageEvent(
-                stage=Stage.FOUND,
-                message=f"{name}: {len(photos)} файлов",
-                elapsed_ms=clock.elapsed_ms,
-                counts={"found_total": len(collected), "from_source": len(photos)},
+
+    async def drain(budget: float) -> AsyncIterator[StageEvent]:
+        """Забирает источники, которые успели ответить в отведённый бюджет.
+
+        Вызывается дважды: сначала с коротким бюджетом первого показа, потом с
+        общим. Незабранные задачи остаются в pending и продолжают работать.
+        """
+        nonlocal pending
+        while pending:
+            remaining = min(clock.remaining(budget), clock.remaining(settings.total_timeout))
+            if remaining <= 0:
+                return
+            done, pending = await asyncio.wait(
+                pending, timeout=remaining, return_when=asyncio.FIRST_COMPLETED
             )
+            if not done:
+                return
+            for task in done:
+                name = tasks[task]
+                try:
+                    photos = task.result()
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("collector %s failed: %s", name, exc)
+                    warnings.append(f"Источник «{name}» не ответил: {exc}")
+                    continue
+                collected.extend(photos)
+                yield StageEvent(
+                    stage=Stage.FOUND,
+                    message=f"{name}: {len(photos)} файлов",
+                    elapsed_ms=clock.elapsed_ms,
+                    counts={"found_total": len(collected), "from_source": len(photos)},
+                )
+
+    names = [uni.name, *uni.aliases]
+    if uni.commons_category:
+        names.append(uni.commons_category)
+
+    def analyze() -> tuple[list[Photo], list[Photo], list[Photo], list[Photo], list[Photo]]:
+        """Склейка, классификация и оценка — всё на CPU, без сети.
+
+        Поэтому вызвать это дважды дёшево: один раз для быстрого первого показа,
+        второй — когда доехали остальные источники.
+        """
+        unique, duplicates = dedup.exact_dedupe(collected)
+
+        for photo in unique:
+            result = classify(photo)
+            if result.category is not PhotoCategory.UNKNOWN:
+                photo.category = result.category
+                photo.category_source = "metadata"
+                photo.category_terms = result.matched
+                photo.evidence.classifier_confidence = result.confidence
+
+        scored = [evidence.score_photo(p, uni.coordinates, uni.website, names) for p in unique]
+        # Дубли тоже считаем: причина отказа у них уже стоит и не перезапишется,
+        # зато в карточке будет нормальный разбор улик, а не пустой блок.
+        for duplicate in duplicates:
+            evidence.score_photo(duplicate, uni.coordinates, uni.website, names)
+
+        verified: list[Photo] = []
+        needs_review: list[Photo] = []
+        rejected: list[Photo] = list(duplicates)
+        for photo in scored:
+            place = evidence.bucket(photo)
+            if place == "verified":
+                verified.append(photo)
+            elif place == "needs_review":
+                needs_review.append(photo)
+            else:
+                rejected.append(photo)
+
+        verified.sort(key=lambda p: p.confidence, reverse=True)
+        needs_review.sort(key=lambda p: p.confidence, reverse=True)
+        return unique, duplicates, verified, needs_review, rejected
+
+    def make_profile(
+        *,
+        unique: list[Photo],
+        duplicates: list[Photo],
+        verified: list[Photo],
+        needs_review: list[Photo],
+        rejected: list[Photo],
+        description: CampusDescription | None = None,
+        partial: bool,
+        surroundings: Surroundings | None = None,
+        district: DistrictInfo | None = None,
+        logistics: Logistics | None = None,
+        videos: list[CampusVideo] | None = None,
+        costs: Costs | None = None,
+    ) -> Profile:
+        return Profile(
+            university=uni,
+            verified=verified,
+            needs_review=needs_review,
+            rejected=rejected,
+            by_category=_make_buckets(verified, classification_ready=True),
+            description=description,
+            stats={
+                "found": len(collected),
+                "unique": len(unique),
+                "duplicates": len(duplicates),
+                "verified": len(verified),
+                "needs_review": len(needs_review),
+                "rejected": len(rejected),
+                "sources": len(collectors),
+            },
+            warnings=warnings,
+            took_ms=clock.elapsed_ms,
+            partial=partial,
+            surroundings=surroundings,
+            district=district,
+            logistics=logistics,
+            events=events_service.build_events([*verified, *needs_review]),
+            videos=videos or [],
+            costs=costs,
+        )
+
+    # --- первый показ: отдаём, что успели собрать за короткий бюджет ---
+    async for event in drain(settings.first_paint_budget):
+        yield event
+
+    unique, duplicates, verified, needs_review, rejected = analyze()
+    if verified or needs_review:
+        yield StageEvent(
+            stage=Stage.VERIFIED,
+            message=(
+                f"Первые фото готовы за {clock.elapsed_ms / 1000:.1f} с: "
+                f"{len(verified)} проверено"
+                + (", остальные источники ещё идут" if pending else "")
+            ),
+            elapsed_ms=clock.elapsed_ms,
+            counts={"verified": len(verified), "needs_review": len(needs_review)},
+            payload=make_profile(
+                unique=unique,
+                duplicates=duplicates,
+                verified=verified,
+                needs_review=needs_review,
+                rejected=rejected,
+                partial=True,
+            ).model_dump(mode="json"),
+        )
+
+    # --- добираем остальные источники до общего бюджета ---
+    async for event in drain(settings.total_timeout):
+        yield event
 
     if site_task is not None and site_task.done() and site_task.exception():
         site_task.exception()  # забираем исключение, чтобы asyncio не ругался
@@ -368,20 +489,7 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
         counts={"found": len(collected)},
     )
 
-    # --- точная дедупликация ---
-    # Перцептивная идёт ПОСЛЕ отсева: качать миниатюры того, что всё равно
-    # выбросим (логотипы, стоки, чужие здания), — трата самой дорогой части
-    # бюджета. Обычно это срезает больше половины загрузок.
-    unique, duplicates = dedup.exact_dedupe(collected)
-
-    # --- классификация по категориям ---
-    for photo in unique:
-        result = classify(photo)
-        if result.category is not PhotoCategory.UNKNOWN:
-            photo.category = result.category
-            photo.category_source = "metadata"
-            photo.category_terms = result.matched
-            photo.evidence.classifier_confidence = result.confidence
+    unique, duplicates, verified, needs_review, rejected = analyze()
 
     classified = sum(1 for p in unique if p.category is not PhotoCategory.UNKNOWN)
     yield StageEvent(
@@ -391,29 +499,10 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
         counts={"classified": classified, "unclassified": len(unique) - classified},
     )
 
-    # --- оценка достоверности ---
-    names = [uni.name, *uni.aliases]
-    if uni.commons_category:
-        names.append(uni.commons_category)
-    scored = [evidence.score_photo(p, uni.coordinates, uni.website, names) for p in unique]
-    # Дубли тоже считаем: причина отказа у них уже стоит и не перезапишется,
-    # зато в карточке будет нормальный разбор улик, а не пустой блок.
-    for duplicate in duplicates:
-        evidence.score_photo(duplicate, uni.coordinates, uni.website, names)
-
-    verified: list[Photo] = []
-    needs_review: list[Photo] = []
-    rejected: list[Photo] = list(duplicates)
-    for photo in scored:
-        place = evidence.bucket(photo)
-        if place == "verified":
-            verified.append(photo)
-        elif place == "needs_review":
-            needs_review.append(photo)
-        else:
-            rejected.append(photo)
-
     # --- перцептивная дедупликация только среди прошедших отбор ---
+    # Она качает миниатюры, то есть это единственная часть анализа, которая
+    # ходит в сеть. Поэтому она идёт ПОСЛЕ первого показа и после отсева:
+    # качать то, что всё равно выбросим, — трата самой дорогой части бюджета.
     survivors = [*verified, *needs_review]
     perceptual: list[Photo] = []
     if survivors:
@@ -471,52 +560,24 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
     if not verified and not needs_review:
         warnings.append("Ни одного подтверждённого фото собрать не удалось — смотрите вкладку «Отклонено»")
 
-    def assemble(
-        description: CampusDescription | None,
-        *,
-        partial: bool,
-        surroundings: Surroundings | None = None,
-        district: DistrictInfo | None = None,
-        logistics: Logistics | None = None,
-        videos: list[CampusVideo] | None = None,
-        costs: Costs | None = None,
-    ) -> Profile:
-        return Profile(
-            university=uni,
+    # Полный набор фото готов — отдаём его, не дожидаясь LLM (п.7 ТЗ:
+    # «фото отправлять по мере готовности»). Описание догонит в DONE.
+    def current(**kw) -> Profile:
+        return make_profile(
+            unique=unique,
+            duplicates=duplicates,
             verified=verified,
             needs_review=needs_review,
             rejected=rejected,
-            by_category=_make_buckets(verified, classification_ready=True),
-            description=description,
-            stats={
-                "found": len(collected),
-                "unique": len(unique),
-                "duplicates": len(duplicates),
-                "verified": len(verified),
-                "needs_review": len(needs_review),
-                "rejected": len(rejected),
-                "sources": len(collectors),
-            },
-            warnings=warnings,
-            took_ms=clock.elapsed_ms,
-            partial=partial,
-            surroundings=surroundings,
-            district=district,
-            logistics=logistics,
-            events=events_service.build_events([*verified, *needs_review]),
-            videos=videos or [],
-            costs=costs,
+            **kw,
         )
 
-    # Фото готовы — отдаём их немедленно, не дожидаясь LLM (п.7 ТЗ:
-    # «фото отправлять по мере готовности»). Описание догонит в DONE.
-    partial_profile = assemble(None, partial=True)
     yield StageEvent(
         stage=Stage.VERIFIED,
         message=f"Проверено: {len(verified)} (+{len(needs_review)} требуют проверки)",
         elapsed_ms=clock.elapsed_ms,
         counts={"verified": len(verified), "needs_review": len(needs_review)},
-        payload=partial_profile.model_dump(mode="json"),
+        payload=current(partial=True).model_dump(mode="json"),
     )
 
     # --- описание кампуса (шаг 6 ТЗ) ---
@@ -629,8 +690,8 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
         except (asyncio.TimeoutError, Exception):  # noqa: BLE001
             video_task.cancel()
 
-    profile = assemble(
-        description,
+    profile = current(
+        description=description,
         partial=False,
         surroundings=surroundings,
         district=district,
