@@ -181,6 +181,8 @@ export type MockOptions = {
   authFails?: boolean;
   /** Overpass промолчал: блок приходит пустым, но карта обязана остаться. */
   overpassDown?: boolean;
+  /** Не блокировать картинки: нужно записи обзора, она подставляет заглушки. */
+  keepImages?: boolean;
 };
 
 /** Подменяет все запросы к API. Бэкенд в браузерных тестах не участвует. */
@@ -247,8 +249,11 @@ export async function mockApi(page: Page, options: MockOptions = {}) {
 
   await page.route("**/api/wallet**", (route) => route.fulfill({ json: { coins: 0, uploads: 0 } }));
   await page.route("**/api/uploads**", (route) => route.fulfill({ json: { items: [] } }));
-  // Картинки Commons наружу не тянем: в тестах сети нет.
-  await page.route("**upload.wikimedia.org/**", (route) => route.abort());
+  // Картинки Commons наружу не тянем: в тестах сети нет. Тур подменяет их
+  // своими заглушками — его маршрут регистрируется позже и срабатывает первым.
+  if (!options.keepImages) {
+    await page.route("**upload.wikimedia.org/**", (route) => route.abort());
+  }
 }
 
 /** Кладёт токен в localStorage — вход в тестах не через форму. */
