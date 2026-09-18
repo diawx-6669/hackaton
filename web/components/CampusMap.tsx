@@ -38,9 +38,15 @@ export default function CampusMap({
       });
       mapRef.current = map;
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19,
+      // Тёмная подложка CARTO поверх данных OpenStreetMap: светлая стандартная
+      // плитка на тёмной странице выглядит дырой. Атрибуция обязательна для
+      // обоих — и для данных OSM, и для оформления CARTO.
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution:
+          '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, ' +
+          '© <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: "abcd",
+        maxZoom: 20,
       }).addTo(map);
 
       const campusIcon = L.divIcon({

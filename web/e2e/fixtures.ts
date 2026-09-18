@@ -179,6 +179,8 @@ export type MockOptions = {
   /** Профиль приходит двумя событиями: verified (фото) и done (с описанием). */
   splitProfile?: boolean;
   authFails?: boolean;
+  /** Overpass промолчал: блок приходит пустым, но карта обязана остаться. */
+  overpassDown?: boolean;
 };
 
 /** Подменяет все запросы к API. Бэкенд в браузерных тестах не участвует. */
@@ -193,19 +195,31 @@ export async function mockApi(page: Page, options: MockOptions = {}) {
   );
 
   await page.route("**/api/profile**", (route) => {
+    const profile = options.overpassDown
+      ? {
+          ...BASE_PROFILE,
+          surroundings: {
+            radius_m: 1200,
+            groups: [],
+            total: 0,
+            available: false,
+            error: "Overpass не ответил — список объектов рядом не собран",
+          },
+        }
+      : BASE_PROFILE;
     const verifiedEvent = {
       stage: "verified",
       message: "Проверено: 3 (+0 требуют проверки)",
       elapsed_ms: 2100,
       counts: { verified: 3, needs_review: 0 },
-      payload: { ...BASE_PROFILE, partial: true, description: null },
+      payload: { ...profile, partial: true, description: null },
     };
     const doneEvent = {
       stage: "done",
       message: "Готово за 2.4 с",
       elapsed_ms: 2400,
-      counts: BASE_PROFILE.stats,
-      payload: BASE_PROFILE,
+      counts: profile.stats,
+      payload: profile,
     };
     const head = [
       { stage: "collecting", message: "Ищем вуз в Wikidata…", elapsed_ms: 0, counts: {}, payload: null },
@@ -222,7 +236,7 @@ export async function mockApi(page: Page, options: MockOptions = {}) {
     ];
     const body = options.splitProfile
       ? sse([...head, verifiedEvent, doneEvent])
-      : sse([...head, { ...verifiedEvent, payload: BASE_PROFILE }, doneEvent]);
+      : sse([...head, { ...verifiedEvent, payload: profile }, doneEvent]);
 
     return route.fulfill({
       status: 200,

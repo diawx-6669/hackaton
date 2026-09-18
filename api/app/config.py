@@ -68,9 +68,16 @@ class Settings(BaseSettings):
     wikidata_api: str = "https://www.wikidata.org/w/api.php"
     wikidata_sparql: str = "https://query.wikidata.org/sparql"
     commons_api: str = "https://commons.wikimedia.org/w/api.php"
-    # Overpass: окружение кампуса (п.8 ТЗ). Публичный инстанс, ключ не нужен,
-    # но есть лимиты — отсюда кеш и всего один ретрай.
-    overpass_api: str = "https://overpass-api.de/api/interpreter"
+    # Overpass: окружение кампуса (п.8 ТЗ). Ключ не нужен, но публичные
+    # инстансы держат лимиты и под нагрузкой отвечают 429 или молчат, поэтому
+    # зеркал несколько: перебираем по очереди, пока кто-то не ответит.
+    overpass_api: str = (
+        "https://overpass-api.de/api/interpreter,"
+        "https://overpass.kumi.systems/api/interpreter,"
+        "https://overpass.private.coffee/api/interpreter"
+    )
+    # Overpass считает запрос сам и отвечает не мгновенно: 4 секунды ему мало.
+    overpass_timeout: float = 20.0
     # OSRM: время в пути. У публичного демо-сервера есть только автомобильный
     # профиль — пешеходные участки поэтому считаются по прямой и так подписаны.
     osrm_endpoint: str = "https://router.project-osrm.org"
@@ -102,6 +109,10 @@ class Settings(BaseSettings):
     @property
     def llm_enabled(self) -> bool:
         return self.active_llm is not None
+
+    @property
+    def overpass_mirrors(self) -> list[str]:
+        return [u.strip() for u in self.overpass_api.split(",") if u.strip()]
 
     @property
     def cors_origin_list(self) -> list[str]:

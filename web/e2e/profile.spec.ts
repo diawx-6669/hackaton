@@ -115,3 +115,30 @@ test.describe("О вузе", () => {
     await expect(page.getByRole("button", { name: "Слушать обзор" })).toBeVisible();
   });
 });
+
+test.describe("Карта окружения", () => {
+  test("карта показывается вместе со списком", async ({ page }) => {
+    await signIn(page);
+    await mockApi(page);
+    await runSearch(page);
+
+    const nearby = page
+      .locator("section", { has: page.getByRole("heading", { name: "Что рядом с кампусом" }) })
+      .last();
+    await expect(nearby.locator(".leaflet-container")).toBeVisible();
+    await expect(nearby).toContainText("Транспорт");
+  });
+
+  test("карта остаётся, даже когда Overpass не ответил", async ({ page }) => {
+    await signIn(page);
+    await mockApi(page, { overpassDown: true });
+    await runSearch(page);
+
+    const nearby = page
+      .locator("section", { has: page.getByRole("heading", { name: "Что рядом с кампусом" }) })
+      .last();
+    // Главное: вместо строки об ошибке человек видит карту.
+    await expect(nearby.locator(".leaflet-container")).toBeVisible();
+    await expect(nearby).toContainText("Overpass не ответил");
+  });
+});

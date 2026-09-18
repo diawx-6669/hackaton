@@ -649,15 +649,32 @@ async def stream_profile(q: str | None = None, qid: str | None = None) -> AsyncI
                 timeout=max(0.5, min(budget, clock.remaining(settings.total_timeout))),
             )
         except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+            # Тихо: блок сам скажет, что данных нет, а красная плашка наверху
+            # для этого слишком громкая — она про проблемы с фотографиями.
+            log.info("OpenStreetMap не успел ответить, блок «%s» не собран", label)
             task.cancel()
-            warnings.append(f"OpenStreetMap не успел ответить — блок «{label}» не собран")
             return None
 
-    surroundings = await _collect_osm(osm_task, "что рядом", 4.0)
-    district = await _collect_osm(district_task, "район", 4.0)
-    for block in (surroundings, district):
-        if block is not None and not block.available and block.error:
-            warnings.append(block.error)
+    # Бюджет больше прежних четырёх секунд: Overpass считает запрос сам и
+    # быстро не отвечает. Фотографии в этот момент уже на экране, так что
+    # ожидание никому не мешает — оно съедает только хвост общего бюджета.
+    surroundings = await _collect_osm(osm_task, "что рядом", 12.0)
+    district = await _collect_osm(district_task, "район", 8.0)
+
+    # Если Overpass промолчал, блок всё равно уходит клиенту — пустой, но с
+    # флагом available=false. Карта и координаты кампуса от Overpass не зависят,
+    # и показать их полезнее, чем не показать ничего.
+    if surroundings is None and uni.coordinates is not None:
+        surroundings = Surroundings(
+            radius_m=osm.DEFAULT_RADIUS_M,
+            groups=[],
+            total=0,
+            available=False,
+            error="Overpass не ответил — список объектов рядом не собран",
+        )
+    # Недоступность OSM в общий список предупреждений НЕ кладём: там ошибки
+    # про сами фотографии, и сообщение про карту сбивало бы с толку. Блок
+    # окружения показывает это сам, тихой строкой под картой.
 
     # Логистика считается из уже собранного: координаты города — из Wikidata,
     # общежитие — ближайшее из блока «что рядом». Лишних запросов в OSM нет.

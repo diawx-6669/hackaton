@@ -186,7 +186,9 @@ export function ProfileView({ profile }: { profile: Profile }) {
       </div>
 
       <div id="sec-nearby" className="scroll-mt-28">
-        {profile.surroundings && <SurroundingsBlock data={profile.surroundings} />}
+        {profile.surroundings && (
+          <SurroundingsBlock data={profile.surroundings} university={uni} />
+        )}
       </div>
 
       <div id="sec-district" className="scroll-mt-28">

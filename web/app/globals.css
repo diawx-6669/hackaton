@@ -309,3 +309,43 @@ kbd {
   .ribbon, .orb, .star-field, .rise, .pulse-dot { animation: none; }
   .card-hover:hover, .primary-action:hover:not(:disabled) { transform: none; }
 }
+
+/* ---------- карта ---------- */
+
+/* Пока плитки грузятся (или если tile-сервер недоступен), под ними должен быть
+   цвет страницы, а не белое полотно Leaflet по умолчанию. */
+/* !important здесь по делу: CSS Leaflet подключается динамическим import()
+   уже после наших стилей и при равной специфичности перебивает их. */
+.leaflet-container {
+  background: oklch(0.16 0.035 263) !important;
+  font: inherit;
+}
+
+.leaflet-control-attribution {
+  background: oklch(0.12 0.03 265 / 82%) !important;
+  color: var(--muted);
+}
+
+.leaflet-control-attribution a {
+  color: var(--accent);
+}
+
+.leaflet-bar a {
+  background: oklch(0.2 0.04 262);
+  color: var(--foreground);
+  border-color: var(--border-soft);
+}
+
+.leaflet-bar a:hover {
+  background: oklch(0.26 0.05 262);
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: oklch(0.18 0.04 263);
+  color: var(--foreground);
+}
+
+.leaflet-popup-content a {
+  color: var(--accent);
+}

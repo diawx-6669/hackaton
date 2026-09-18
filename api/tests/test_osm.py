@@ -117,3 +117,30 @@ async def test_no_coordinates_means_no_request(api_mock):
     route = api_mock.post(OVERPASS).mock(return_value=httpx.Response(200, json={"elements": []}))
     assert await osm.fetch_surroundings(None) is None
     assert not route.called
+
+
+async def test_profile_keeps_surroundings_block_when_overpass_is_down(api_mock, monkeypatch):
+    """Карта не должна пропадать из-за Overpass: у неё свои данные — координаты."""
+    import httpx as _httpx
+
+    from app.models import Stage
+    from app.pipeline import stream_profile
+    from tests import fixtures
+    from tests.conftest import COMMONS_API, WIKIDATA_API, WIKIDATA_SPARQL, commons_handler
+
+    api_mock.get(WIKIDATA_API).mock(return_value=_httpx.Response(200, json=fixtures.WBSEARCH))
+    api_mock.get(WIKIDATA_SPARQL).mock(return_value=_httpx.Response(200, json=fixtures.SPARQL))
+    api_mock.get(COMMONS_API).mock(side_effect=commons_handler(fixtures.COMMONS_FIXTURES))
+    api_mock.post(OVERPASS).mock(return_value=_httpx.Response(504, text="gateway timeout"))
+
+    events = [e async for e in stream_profile(qid=fixtures.QID)]
+    done = events[-1]
+    assert done.stage is Stage.DONE
+
+    surroundings = done.payload["surroundings"]
+    assert surroundings is not None, "блок обязан дойти до клиента даже без Overpass"
+    assert surroundings["available"] is False
+    assert surroundings["radius_m"] > 0
+
+    # И ни одного слова про Overpass в общем списке предупреждений: он про фото.
+    assert not any("verpass" in w for w in done.payload["warnings"])

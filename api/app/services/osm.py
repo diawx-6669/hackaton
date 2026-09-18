@@ -145,6 +145,26 @@ def _walk_minutes(distance_m: float) -> int:
     return max(1, round(distance_m / WALK_SPEED_M_PER_MIN))
 
 
+async def _overpass(query: str) -> dict[str, Any]:
+    """Спрашиваем зеркала по очереди: первое ответившее и выигрывает.
+
+    Публичные инстансы Overpass регулярно отвечают 429 под нагрузкой, и один
+    адрес — это гарантированные пустые блоки в час пик.
+    """
+    s = get_settings()
+    mirrors = s.overpass_mirrors
+    last: Exception | None = None
+    for url in mirrors:
+        try:
+            return await post_json(url, {"data": query}, retries=0, timeout=s.overpass_timeout)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — пробуем следующее зеркало
+            log.warning("overpass %s не ответил: %s", url, exc)
+            last = exc
+    raise last or RuntimeError("не задано ни одного адреса Overpass")
+
+
 def parse_elements(
     elements: list[dict[str, Any]], campus: Coordinates, radius: int
 ) -> list[SurroundingGroup]:
@@ -206,7 +226,7 @@ async def fetch_surroundings(
     key = f"osm:v1:{coords.lat:.4f},{coords.lon:.4f}:{radius}"
 
     async def produce() -> Surroundings:
-        data = await post_json(s.overpass_api, {"data": _build_query(coords, radius)})
+        data = await _overpass(_build_query(coords, radius))
         groups = parse_elements(data.get("elements") or [], coords, radius)
         return Surroundings(
             radius_m=radius,
@@ -313,7 +333,7 @@ async def fetch_district(
     key = f"osm-district:v1:{coords.lat:.4f},{coords.lon:.4f}:{radius}"
 
     async def produce() -> DistrictInfo:
-        data = await post_json(s.overpass_api, {"data": _build_district_query(coords, radius)})
+        data = await _overpass(_build_district_query(coords, radius))
         return parse_district(data.get("elements") or [], coords, radius)
 
     try:
